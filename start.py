@@ -12,6 +12,7 @@ import re
 import random
 import uuid
 import os
+from arrow import Arrow
 
 
 def get_parent_dir():
@@ -104,6 +105,55 @@ def get_key_result_from_goal(goal_rec, key_result_search):
         return [goal_rec for goal_rec in key_results if goal_rec['name'] in key_result_search]
 
 
+def time_completed_to_points(dt: datetime):
+    dt_reg = Arrow.fromdatetime(dt, 'America/New_York').datetime
+    return (24 - dt_reg.hour) - dt_reg.minute/60 - dt_reg.second/3600
+
+
+def get_time_limit_points(conf, goal_name, data, proj_list):
+    for proj in proj_list:
+        total_duration = 0
+        goal_duration = conf['Weekly goals update'][goal_name]['toggl_config']['duration']
+        for entry in data[proj]:
+            total_duration += entry['duration']
+            if total_duration >= goal_duration:
+                extra = total_duration - goal_duration
+                goal_finish_time = parser.parse(
+                    entry['stop']) - timedelta(minutes=extra)
+                return time_completed_to_points(goal_finish_time)
+    return 0.0
+
+
+def get_last_time_points(conf, goal_name, data, proj_list):
+    last_entry = None
+    for proj in proj_list:
+        total_duration = 0
+        final_proj_entry = data[proj][-1]
+        if not last_entry or parser.parse(
+                final_proj_entry['stop']) > parser.parse(last_entry['stop']):
+            last_entry = final_proj_entry
+    if not last_entry:
+        return 0.0
+
+    goal_finish_time = parser.parse(last_entry['stop'])
+    return time_completed_to_points(goal_finish_time)
+
+
+def update_time_goal(date=None):
+    if not date:
+        date = datetime.strftime(datetime.now(), '%m-%d-%y')
+    conf = get_conf()
+    for goal_name, goal_name_rec in conf['Weekly goals update'].items():
+        data = get_data_from_project(
+            'Toggl', f'{date}_{goal_name_rec["toggl_config"]["toggl_keyword"]}.json')
+        goal_duration = goal_name_rec['toggl_config']['duration']
+        proj_list = conf[goal_name_rec['toggl_config']['projects']]
+        if goal_duration > 0:
+            pts = get_time_limit_points(conf, goal_name, data, proj_list)
+        else:
+            pts = get_last_time_points(conf, goal_name, data, proj_list)
+
+
 def update_song_count():
     deduped_song_file = get_data_from_project(
         'Spotipy', 'deduped_songs_list.json')
@@ -162,49 +212,16 @@ def create_goal(goal_name, start_date, due_date, color="%06x" % random.randint(0
     goal.pop('key_result_count')
     goal.pop('last_update')
 
-    trial = """
-    {
-  "goals": [
-    {
-      "id": "e53a033c-900e-462d-a849-4a216b06d930",
-      "name": "Updated Goal Name",
-      "team_id": "%d",
-      "date_created": "1568044355026",
-      "start_date": null,
-      "due_date": "1568036964079",
-      "description": "Updated Goal Description",
-      "private": false,
-      "archived": false,
-      "creator": "%d",
-      "color": "#32a852",
-      "pretty_id": "621",
-      "multiple_owners": true,
-      "folder_id": null,
-      "members": [],
-      "owners": [
-      ],
-      "key_results": [],
-      "percent_completed": 0,
-      "history": [],
-      "pretty_url": "https://app.clickup.com/512/goals/21"
-    }
-  ],
-  "folders": [
-  ]
-}
-    """%(int(team_id), int(user['user']['id']))
-
     new_goal = {'goal': goal}
-    print(json.dumps(new_goal, indent=4))
     print(len(goal))
     print(clickup.post(
-        f'https://api.clickup.com/api/v2/team/{team_id}/goal', data=json.loads(trial)))
+        f'https://api.clickup.com/api/v2/team/{team_id}/goal', data=new_goal))
 
 
 def create_weekly_goal(goal_name, start_date, end_date):
     due_date = f'{end_date} 11:59 pm'
     conf = get_conf()
-    color = conf['Weekly goals update'][goal_name]['color']
+    color = conf['Weekly goals update'][goal_name]['goal_config']['color']
     description = f'{start_date} - {end_date}'
     create_goal(goal_name, start_date, due_date, color, description)
 
@@ -234,6 +251,7 @@ def archive_historical_goals():
     goal_list = get_goal_from_search(conf['Weekly goals update'])
     for goal in goal_list:
         archive_goal(goal)
+
 
 """
 with (Path(__file__).parent / f'data/goals.json').open('w+') as file:
