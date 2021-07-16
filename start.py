@@ -143,15 +143,16 @@ def update_time_goal(date=None):
     if not date:
         date = datetime.strftime(datetime.now(), '%m-%d-%y')
     conf = get_conf()
-    for goal_name, goal_name_rec in conf['Weekly goals update'].items():
+    for goal_name, goal_conf in conf['Weekly goals update']['goals'].items():
         data = get_data_from_project(
-            'Toggl', f'{date}_{goal_name_rec["toggl_config"]["toggl_keyword"]}.json')
-        goal_duration = goal_name_rec['toggl_config']['duration']
-        proj_list = conf[goal_name_rec['toggl_config']['projects']]
+            'Toggl', f'{date}_{goal_conf["toggl_config"]["toggl_keyword"]}.json')
+        goal_duration = goal_conf['toggl_config']['duration']
+        proj_list = conf[goal_conf['toggl_config']['projects']]
         if goal_duration > 0:
             pts = get_time_limit_points(conf, goal_name, data, proj_list)
         else:
             pts = get_last_time_points(conf, goal_name, data, proj_list)
+        
 
 
 def update_song_count():
@@ -175,64 +176,51 @@ def update_song_count():
 
 def archive_goal(goal_rec):
     goal_id = goal_rec['goal']['id']
-    goal_rec['goal']['archived'] = True
-    clickup.put(
-        f'https://api.clickup.com/api/v2/goal/{goal_id}', data=goal_rec)
+    goal_update = {
+        'archived': True
+    }
+    return clickup.put(
+        f'https://api.clickup.com/api/v2/goal/{goal_id}', json=goal_update)
 
 
-def create_goal(goal_name, start_date, due_date, color="%06x" % random.randint(0, 0xFFFFFF), description=''):
-    parent_dir = get_parent_dir()
-    goal = json.load(open(f'{parent_dir}/data/goals.json'))['goals'][0]
-    goal['name'] = goal_name
-    goal['due_date'] = str(parser.parse(due_date).timestamp())
-    goal['team_id'] = team_id
-    goal['description'] = description
-    goal['owners'] = [user['user']]
-    goal['multiple_owners'] = False
-    goal['color'] = color.lower()
-    goal['team_id'] = team_id
-    goal['creator'] = int(user['user']['id'])
-    goal['start_date'] = str(parser.parse(start_date).timestamp())
-    goal['private'] = False
-    goal['archived'] = False
-    goal['multiple_owners'] = True
-    goal['folder_id'] = None
-    goal['members'] = []
-    goal['key_results'] = []
-    goal['percent_completed'] = 0.0
-    goal['history'] = []
-    goal['id'] = str(uuid.uuid1())
-    goal["pretty_id"] = str(random.randint(20, 100))
-    goal["pretty_url"] = f"https://app.clickup.com/8609598/goals/{goal['pretty_id']}"
+def create_goal(goal_name, due_date: str, color=None, description=''):
+    if not color:
+        color = "%06x" % random.randint(0, 0xFFFFFF)
+    due_date_ts = parser.parse(due_date).timestamp() * 1000
+    goal = {
+    "name": goal_name,
+    "due_date": int(due_date_ts),
+    "description": description,
+    "multiple_owners": True,
+    "owners": [
+        user['user']['id']
+    ],
+    "color": f'#{color.lower()}'
+    }
 
-    goal.pop('editor_token')
-    goal.pop('pinned')
-    goal.pop('date_updated')
-    goal.pop('owner')
-    goal.pop('key_result_count')
-    goal.pop('last_update')
-
-    new_goal = {'goal': goal}
-    print(len(goal))
-    print(clickup.post(
-        f'https://api.clickup.com/api/v2/team/{team_id}/goal', data=new_goal))
+    return clickup.post(
+        f'https://api.clickup.com/api/v2/team/{team_id}/goal',json=goal)
 
 
-def create_weekly_goal(goal_name, start_date, end_date):
+def create_weekly_goal(goal_name, goal_conf, start_date, end_date):
     due_date = f'{end_date} 11:59 pm'
-    conf = get_conf()
-    color = conf['Weekly goals update'][goal_name]['goal_config']['color']
+    color = goal_conf['clickup_config']['color']
     description = f'{start_date} - {end_date}'
-    create_goal(goal_name, start_date, due_date, color, description)
+    return create_goal(goal_name, due_date, color, description)
 
 
-def update_weekly_goal():
+def update_weekly_goals():
     conf = get_conf()
-    for goal_name in conf['Weekly goals update']:
+    parent_dir = get_parent_dir()
+    try:
+        curr_goals = json.load(open(f'{parent_dir}\\curr_goals.json'))
+    except:
+        curr_goals = []
+    for goal_name, goal_conf in conf['Weekly goals update']['goals'].items():
         goal_rec = get_goal_from_search(goal_name)
         if not goal_rec:
             new_start_date, new_end_date = get_date_change()
-            create_weekly_goal(goal_name, new_start_date, new_end_date)
+            create_weekly_goal(goal_name, goal_conf, new_start_date, new_end_date)
             continue
 
         date_pat = r'[0-9]*-[0-9]*-[0-9]*'
@@ -240,10 +228,9 @@ def update_weekly_goal():
         description = goal_rec['goal']['description']
         date_range_str = re.search(range_pat, description).group()
         start_date_str, end_date_str = re.findall(date_pat, date_range_str)
-        if not (datetime.now() >= datetime.strptime(start_date_str, '%m-%d-%y') and datetime.now() <= datetime.strptime(end_date_str, '%m-%d-%y')):
-            archive_goal(goal_rec)
+        if not (datetime.now() >= parser.parse(start_date_str) and datetime.now() <= parser.parse(end_date_str)):
             new_start_date, new_end_date = get_date_change()
-            create_weekly_goal(goal_name, new_start_date, new_end_date)
+            create_weekly_goal(goal_name, goal_conf, new_start_date, new_end_date)
 
 
 def archive_historical_goals():
@@ -258,4 +245,4 @@ with (Path(__file__).parent / f'data/goals.json').open('w+') as file:
     file.write(json.dumps(clickup.get(f'https://api.clickup.com/api/v2/team/{team_id}/goal')))
 """
 
-update_weekly_goal()
+update_weekly_goals()
