@@ -58,6 +58,7 @@ def get_conf():
         f"./data/conf.json"
     return json.load(conf_file.open())
 
+
 def update_conf(conf):
     conf_file = Path(__file__).parent / \
         f"./data/conf.json"
@@ -89,8 +90,10 @@ def get_date_change():
 def determine_if_change():
     goals_list = get_all_goals(clickup)
 
+
 def get_goal_from_id(goal_id):
     return clickup.get(f'https://api.clickup.com/api/v2/goal/{goal_id}')
+
 
 def get_goal_from_search(goal_search):
     goals = get_all_goals()
@@ -146,18 +149,20 @@ def get_last_time_points(conf, goal_name, data, proj_list):
     goal_finish_time = parser.parse(last_entry['stop'])
     return time_completed_to_points(goal_finish_time)
 
+
 def update_weekly_key_result(goal_name, key_result_name, steps_current, note):
     goal_rec = get_goal_from_search(goal_name)
 
     key_result_habit = get_key_result_from_goal(
-    goal_rec, key_result_name)
+        goal_rec, key_result_name)
 
     key_result_habit_id = key_result_habit['id']
 
     key_result_habit['steps_current'] = steps_current
     key_result_habit['note'] = note
     clickup.put(
-    f'https://api.clickup.com/api/v2/key_result/{key_result_habit_id}', data=key_result_habit)
+        f'https://api.clickup.com/api/v2/key_result/{key_result_habit_id}', data=key_result_habit)
+
 
 def check_for_extra(goal_name, key_result_name, date: str):
     goal_rec = get_goal_from_search(goal_name)
@@ -165,12 +170,14 @@ def check_for_extra(goal_name, key_result_name, date: str):
     net_change = 0.0
     for hist_rec in goal_rec['goal']['history']:
         if hist_rec['key_result_id'] == key_result['id'] and hist_rec[
-            'note'] == date:
+                'note'] == date:
             net_change += hist_rec['steps_taken']
     if not net_change == 0.0:
         return update_weekly_key_result(goal_name, key_result_name, net_change, date)
-    
+
     return 0
+
+
 def update_time_goal(date=None):
     if not date:
         date = datetime.strftime(datetime.now(), '%m-%d-%y')
@@ -184,10 +191,11 @@ def update_time_goal(date=None):
             pts = get_time_limit_points(conf, goal_name, data, proj_list)
         else:
             pts = get_last_time_points(conf, goal_name, data, proj_list)
-        
+
         check_for_extra(goal_name, 'Hour Points', date)
         note = datetime.strftime(datetime.now(), '%m-%d-%y')
-        key_result_created = update_weekly_key_result(goal_name, 'Hour Points', pts, note)
+        key_result_created = update_weekly_key_result(
+            goal_name, 'Hour Points', pts, note)
         if 'err' in key_result_created:
             print(f'Key result of {goal_name} not generated.')
 
@@ -201,11 +209,12 @@ def update_song_count():
     conf = get_conf()
     note = datetime.strftime(datetime.now(), '%m-%d-%y')
     check_for_extra(conf['Weekly goals update']['song_habit']['name'],
-        conf['song_habit']['key_result_count'],
-        note)
+                    conf['song_habit']['key_result_count'],
+                    note)
     return update_weekly_key_result(conf['Weekly goals update']['song_habit']['name'],
-     conf['song_habit']['key_result_count'],
-        deduped_songs_len, note)
+                                    conf['song_habit']['key_result_count'],
+                                    deduped_songs_len, note)
+
 
 def archive_goal(goal_rec):
     goal_id = goal_rec['goal']['id']
@@ -221,18 +230,19 @@ def create_goal(goal_name, due_date: str, color=None, description=''):
         color = "%06x" % random.randint(0, 0xFFFFFF)
     due_date_ts = parser.parse(due_date).timestamp() * 1000
     goal = {
-    "name": goal_name,
-    "due_date": int(due_date_ts),
-    "description": description,
-    "multiple_owners": True,
-    "owners": [
-        user['user']['id']
-    ],
-    "color": f'#{color.lower()}'
+        "name": goal_name,
+        "due_date": int(due_date_ts),
+        "description": description,
+        "multiple_owners": True,
+        "owners": [
+            user['user']['id']
+        ],
+        "color": f'#{color.lower()}'
     }
 
     return clickup.post(
-        f'https://api.clickup.com/api/v2/team/{team_id}/goal',json=goal)
+        f'https://api.clickup.com/api/v2/team/{team_id}/goal', json=goal)
+
 
 def create_key_result(goal_id, name, steps_start, steps_end, unit):
     key_result = {
@@ -249,32 +259,37 @@ def create_key_result(goal_id, name, steps_start, steps_end, unit):
     }
 
     return clickup.post(
-        f'https://api.clickup.com/api/v2/goal/{goal_id}/key_result',json=key_result)
+        f'https://api.clickup.com/api/v2/goal/{goal_id}/key_result', json=key_result)
+
 
 def create_weekly_goal(goal_name, goal_conf, start_date, end_date):
     due_date = f'{end_date} 11:59 pm'
     color = goal_conf['clickup_config']['color']
     description = f'{start_date} - {end_date}'
-    goal_created =  create_goal(goal_name, due_date, color, description)
+    goal_created = create_goal(goal_name, due_date, color, description)
     if not 'err' in goal_created:
         create_weekly_key_result(goal_name, goal_created)
         return get_goal_from_id(goal_created['goal']['id'])
 
     return goal_created
 
+
 def create_weekly_key_result(goal_name, goal_rec):
-    return create_key_result(goal_rec['goal']['id'], 'Hour Points', 0, 
-    calculate_points(goal_name), 'pts')
+    return create_key_result(goal_rec['goal']['id'], 'Hour Points', 0,
+                             calculate_points(goal_name), 'pts')
+
 
 def calculate_points(goal_name):
     conf = get_conf()
     goal_records = conf['Weekly goals update']['goals'][goal_name]['goal_records']
-    sorted_goal_recs = goal_records.sort(key=lambda item: parser.parse(item['end_date']))
+    sorted_goal_recs = goal_records.sort(
+        key=lambda item: parser.parse(item['end_date']))
     if not sorted_goal_recs:
         return 1
     pts_list = [item['pts_achieved'] for item in sorted_goal_recs[-5:]]
     return sum(pts_list)/len(pts_list)
-    
+
+
 def update_weekly_goals():
     conf = get_conf()
     parent_dir = get_parent_dir()
@@ -286,7 +301,8 @@ def update_weekly_goals():
         goal_rec = get_goal_from_search(goal_name)
         if not goal_rec:
             new_start_date, new_end_date = get_date_change()
-            create_weekly_goal(goal_name, goal_conf, new_start_date, new_end_date)
+            create_weekly_goal(goal_name, goal_conf,
+                               new_start_date, new_end_date)
             continue
 
         date_pat = r'[0-9]*-[0-9]*-[0-9]*'
@@ -297,8 +313,9 @@ def update_weekly_goals():
         if not (datetime.now() >= parser.parse(start_date_str) and datetime.now() <= parser.parse(end_date_str)):
             new_start_date, new_end_date = get_date_change()
             archive_goal(goal_rec)
-            create_weekly_goal(goal_name, goal_conf, new_start_date, new_end_date)
-        
+            create_weekly_goal(goal_name, goal_conf,
+                               new_start_date, new_end_date)
+
         update_time_goal()
 
 
