@@ -50,7 +50,7 @@ def reference(clickup):
 def get_data_from_project(project, file_name):
     proj_data_file = Path(__file__).parent / \
         f"../{project}/data/{file_name}"
-    return proj_data_file.open()
+    return json.load(proj_data_file.open())
 
 
 def get_conf():
@@ -77,12 +77,13 @@ def get_all_goals():
     return list(map(lambda goal_rec: get_goal_from_id(goal_rec['id']), goal_list))
 
 
-def get_date_change():
-    today = date.today()
-    last_wed_offset = (today.weekday() - 2) % 7
-    next_tues_offset = -(today.weekday() - 1) % 7
-    last_wed = today - timedelta(days=last_wed_offset)
-    next_tues = today + timedelta(days=next_tues_offset)
+def get_date_change(day=None):
+    if not day:
+        day = date.today()
+    last_wed_offset = (day.weekday() - 2) % 7
+    next_tues_offset = -(day.weekday() - 1) % 7
+    last_wed = day - timedelta(days=last_wed_offset)
+    next_tues = day + timedelta(days=next_tues_offset)
 
     return f'{last_wed.month}-{last_wed.day}-{last_wed.year}', f'{next_tues.month}-{next_tues.day}-{next_tues.year}'
 
@@ -122,16 +123,18 @@ def time_completed_to_points(dt: datetime):
 
 
 def get_time_limit_points(conf, goal_name, data, proj_list):
+    goal_duration = conf['Weekly goals update']['goals'][
+        goal_name]['toggl_config']['duration']
+    total_duration = 0.0
     for proj in proj_list:
-        total_duration = 0
-        goal_duration = conf['Weekly goals update'][goal_name]['toggl_config']['duration']
         for entry in data[proj]:
-            total_duration += entry['duration']
+            total_duration += entry['duration']/60.0
             if total_duration >= goal_duration:
                 extra = total_duration - goal_duration
                 goal_finish_time = parser.parse(
                     entry['stop']) - timedelta(minutes=extra)
-                return time_completed_to_points(goal_finish_time)
+                return_value = time_completed_to_points(goal_finish_time)
+                return return_value
     return 0.0
 
 
@@ -158,10 +161,13 @@ def update_weekly_key_result(goal_name, key_result_name, steps_current, note):
 
     key_result_habit_id = key_result_habit['id']
 
-    key_result_habit['steps_current'] = steps_current
-    key_result_habit['note'] = note
-    clickup.put(
-        f'https://api.clickup.com/api/v2/key_result/{key_result_habit_id}', data=key_result_habit)
+    key_result_habit_new = {
+        'steps_current': steps_current,
+        'note': note
+    }
+
+    return clickup.put(
+        f'https://api.clickup.com/api/v2/key_result/{key_result_habit_id}', json=key_result_habit_new)
 
 
 def check_for_extra(goal_name, key_result_name, date: str):
@@ -186,14 +192,17 @@ def update_time_goal(date=None):
         data = get_data_from_project(
             'Toggl', f'{date}_{goal_conf["toggl_config"]["toggl_keyword"]}.json')
         goal_duration = goal_conf['toggl_config']['duration']
-        proj_list = conf[goal_conf['toggl_config']['projects']]
+        proj_list = conf['Weekly goals update'][goal_conf['toggl_config']['projects']]
         if goal_duration > 0:
             pts = get_time_limit_points(conf, goal_name, data, proj_list)
         else:
             pts = get_last_time_points(conf, goal_name, data, proj_list)
-
-        check_for_extra(goal_name, 'Hour Points', date)
+        
         note = datetime.strftime(datetime.now(), '%m-%d-%y')
+        extra_pts = check_for_extra(goal_name, 'Hour Points', date)
+        if extra_pts != 0 and extra_pts != pts:
+            update_weekly_key_result(
+            goal_name, 'Hour Points', -extra_pts, note)
         key_result_created = update_weekly_key_result(
             goal_name, 'Hour Points', pts, note)
         if 'err' in key_result_created:
@@ -316,7 +325,7 @@ def update_weekly_goals():
             create_weekly_goal(goal_name, goal_conf,
                                new_start_date, new_end_date)
 
-        update_time_goal()
+    update_time_goal()
 
 
 def archive_historical_goals():
