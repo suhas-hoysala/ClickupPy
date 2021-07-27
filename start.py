@@ -1,18 +1,16 @@
 from pyclickup import ClickUp
-from secrets import api_token
 import json
-from typing import Union, overload
+from typing import Union
 from requests.models import Response
 from pathlib import Path
 from dateutil.relativedelta import relativedelta
 from datetime import datetime, timedelta
 from datetime import date
 from dateutil import parser
-import re
 import random
-import uuid
 import os
 from arrow import Arrow
+from togglmethods.drivers import *
 
 
 def get_parent_dir():
@@ -27,10 +25,23 @@ class ClickUpExt(ClickUp):
         request = self._req(path, method="delete", **kwargs)
         return request if raw else request.json()
 
+def get_conf():
+    conf_file = Path(__file__).parent / \
+        f"./data/conf.json"
+    return json.load(conf_file.open())
+
+
+api_token = get_conf()['api_token']
+headers = {
+    "Accept": "*/*",
+    "AcceptEncoding": "gzip, deflate",
+    "Authorization": api_token,
+	"Connection": "keep-alive",
+}
 
 clickup = ClickUpExt(api_token)
+user = requests.get('https://api.clickup.com/api/v2/user', headers=headers).json()
 team_id = clickup.teams[0].id
-user = clickup.get('https://api.clickup.com/api/v2/user')
 
 
 def reference(clickup):
@@ -53,10 +64,6 @@ def get_data_from_project(project, file_name):
     return json.load(proj_data_file.open())
 
 
-def get_conf():
-    conf_file = Path(__file__).parent / \
-        f"./data/conf.json"
-    return json.load(conf_file.open())
 
 
 def update_conf(conf):
@@ -67,25 +74,30 @@ def update_conf(conf):
 
 
 def get_goal_from_id(goal_id):
-    return clickup.get(f'https://api.clickup.com/api/v2/goal/{goal_id}')
+    return requests.get(f'https://api.clickup.com/api/v2/goal/{goal_id}', headers=headers)
 
 
 def get_all_goals():
-    goal_list = clickup.get(
-        f'https://api.clickup.com/api/v2/team/{team_id}/goal')['goals']
+    goal_list = requests.get(
+        f'https://api.clickup.com/api/v2/team/{team_id}/goal', headers=headers)['goals']
 
     return list(map(lambda goal_rec: get_goal_from_id(goal_rec['id']), goal_list))
 
 
-def get_date_change(day=None):
+def get_date_change(day: str = None, start_day: str = 'Wed'):
     if not day:
         day = date.today()
-    last_wed_offset = (day.weekday() - 2) % 7
-    next_tues_offset = -(day.weekday() - 1) % 7
-    last_wed = day - timedelta(days=last_wed_offset)
-    next_tues = day + timedelta(days=next_tues_offset)
+    else:
+        day = parser.parse(day)
 
-    return f'{last_wed.month}-{last_wed.day}-{last_wed.year}', f'{next_tues.month}-{next_tues.day}-{next_tues.year}'
+    start_day = parser.parse(start_day)
+
+    start_day_offset = (day.weekday() - start_day) % 7
+    end_day_offset = -(day.weekday() - (start_day-1)) % 7
+    start_day_date = day - timedelta(days=start_day_offset)
+    end_day_date = day + timedelta(days=end_day_offset)
+
+    return f'{start_day_date.month}-{start_day_date.day}-{start_day_date.year}', f'{end_day_date.month}-{end_day_date.day}-{end_day_date.year}'
 
 
 def determine_if_change():
@@ -93,14 +105,16 @@ def determine_if_change():
 
 
 def get_goal_from_id(goal_id):
-    return clickup.get(f'https://api.clickup.com/api/v2/goal/{goal_id}')
+    return requests.get(f'https://api.clickup.com/api/v2/goal/{goal_id}', headers=headers)
 
 
-def get_goal_from_search(goal_search):
+def get_goal_from_search(goal_search, description=None):
     goals = get_all_goals()
     if type(goal_search) == str:
         search_list = [
-            goal_rec for goal_rec in goals if goal_rec['goal']['name'] == goal_search]
+            goal_rec for goal_rec in goals if goal_rec['goal']['name'] == goal_search
+            and (not description or goal_rec['goal']['description'] == description)
+        ]
         return search_list[0] if search_list else None
 
     elif type(goal_search) == list:
@@ -189,20 +203,20 @@ def update_time_goal(date=None):
         date = datetime.strftime(datetime.now(), '%m-%d-%y')
     conf = get_conf()
     for goal_name, goal_conf in conf['Weekly goals update']['goals'].items():
-        data = get_data_from_project(
-            'Toggl', f'{date}_{goal_conf["toggl_config"]["toggl_keyword"]}.json')
+        method_name = goal_conf["toggl_config"]["toggl_keyword"]
+        data = exec(f'{method_name}_time_entries({date})')
         goal_duration = goal_conf['toggl_config']['duration']
         proj_list = conf['Weekly goals update'][goal_conf['toggl_config']['projects']]
         if goal_duration > 0:
             pts = get_time_limit_points(conf, goal_name, data, proj_list)
         else:
             pts = get_last_time_points(conf, goal_name, data, proj_list)
-        
+
         note = datetime.strftime(datetime.now(), '%m-%d-%y')
         extra_pts = check_for_extra(goal_name, 'Hour Points', date)
         if extra_pts != 0 and extra_pts != pts:
             update_weekly_key_result(
-            goal_name, 'Hour Points', -extra_pts, note)
+                goal_name, 'Hour Points', -extra_pts, note)
         key_result_created = update_weekly_key_result(
             goal_name, 'Hour Points', pts, note)
         if 'err' in key_result_created:
@@ -299,33 +313,24 @@ def calculate_points(goal_name):
     return sum(pts_list)/len(pts_list)
 
 
-def update_weekly_goals():
+def update_weekly_goals(day: str = None):
     conf = get_conf()
-    parent_dir = get_parent_dir()
-    try:
-        curr_goals = json.load(open(f'{parent_dir}\\curr_goals.json'))
-    except:
-        curr_goals = []
+
+    if not day:
+        day = datetime.strftime(datetime.today(), '%m-%d-%y')
     for goal_name, goal_conf in conf['Weekly goals update']['goals'].items():
-        goal_rec = get_goal_from_search(goal_name)
+        start_date, end_date = get_date_change(day)
+        goal_rec = get_goal_from_search(
+            goal_name, description=f'{start_date} {end_date}')
         if not goal_rec:
-            new_start_date, new_end_date = get_date_change()
-            create_weekly_goal(goal_name, goal_conf,
-                               new_start_date, new_end_date)
-            continue
-
-        date_pat = r'[0-9]*-[0-9]*-[0-9]*'
-        range_pat = rf'{date_pat} - {date_pat}'
-        description = goal_rec['goal']['description']
-        date_range_str = re.search(range_pat, description).group()
-        start_date_str, end_date_str = re.findall(date_pat, date_range_str)
-        if not (datetime.now() >= parser.parse(start_date_str) and datetime.now() <= parser.parse(end_date_str)):
-            new_start_date, new_end_date = get_date_change()
             archive_goal(goal_rec)
-            create_weekly_goal(goal_name, goal_conf,
-                               new_start_date, new_end_date)
+        create_weekly_goal(goal_name, goal_conf,
+                           start_date, end_date)
 
-    update_time_goal()
+    dates_of_week = [parser.parse(start_date) + datetime.timedelta(days=x)
+                     for x in range(0, (parser.parse(end_date)-parser.parse(start_date)).days)]
+    for date in dates_of_week:
+        update_time_goal(datetime.strptime(date, '%m-%d-%y'))
 
 
 def archive_historical_goals():
@@ -337,7 +342,7 @@ def archive_historical_goals():
 
 """
 with (Path(__file__).parent / f'data/goals.json').open('w+') as file:
-    file.write(json.dumps(clickup.get(f'https://api.clickup.com/api/v2/team/{team_id}/goal')))
+    file.write(json.dumps(requests.get(f'https://api.clickup.com/api/v2/team/{team_id}/goal')))
 """
 
 update_weekly_goals()
