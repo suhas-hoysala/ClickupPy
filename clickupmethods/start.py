@@ -27,7 +27,7 @@ class ClickUpExt(ClickUp):
 
 def get_conf():
     conf_file = Path(__file__).parent / \
-        f"./data/conf.json"
+        f"../data/conf.json"
     return json.load(conf_file.open())
 
 
@@ -60,7 +60,7 @@ def reference(clickup):
 
 def get_data_from_project(project, file_name):
     proj_data_file = Path(__file__).parent / \
-        f"../{project}/data/{file_name}"
+        f".../{project}/data/{file_name}"
     return json.load(proj_data_file.open())
 
 
@@ -68,7 +68,7 @@ def get_data_from_project(project, file_name):
 
 def update_conf(conf):
     conf_file = Path(__file__).parent / \
-        f"./data/conf.json"
+        f"../data/conf.json"
     json.dump(conf, conf_file.open('w+'))
     return get_conf()
 
