@@ -365,6 +365,22 @@ def calculate_hour_points(goal_name):
     pts_list = [item['pts_achieved'] for item in sorted_goal_recs[-5:]]
     return sum(pts_list)/len(pts_list)
 
+def update_goal_hist(existing_goal_rec):
+    if not existing_goal_rec:
+        return None
+    
+    goal_name = existing_goal_rec['goal']['name']
+    key_result = get_key_result_from_goal(existing_goal_rec, 'Hour Points')
+    pts_achieved = key_result['steps_current']
+    completed = key_result['completed']
+    conf = get_conf()
+    conf['Weekly goals update']['goals'][goal_name]['goal_records'].append(
+        {
+            'pts_achieved': pts_achieved,
+            'completed': completed
+        }
+    )
+    update_conf(conf)
 
 def update_weekly_goals(day: str = None):
     conf = get_conf()
@@ -379,6 +395,7 @@ def update_weekly_goals(day: str = None):
             existing_goal_rec = get_goal_from_search(goal_name)
             existing_goal_rec = archive_goal(
                 existing_goal_rec) if existing_goal_rec else None
+            
             create_weekly_goal(goal_name, goal_conf,
                                start_date, end_date)
 
