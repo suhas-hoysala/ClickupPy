@@ -208,10 +208,11 @@ def update_control_key_result(goal_name, note):
     new_percent_completed_dec = decimal.Decimal(percent_completed)
     new_percent_completed = float(round(new_percent_completed_dec, 2))
 
-    key_result_control_new = {
-        'steps_current': new_percent_completed,
-        'note': note
-    }
+    if new_percent_completed > 0.995:
+        new_percent_completed = 0.995
+
+    return update_weekly_key_result(goal_name, 'Control Points', 
+    new_percent_completed, note)
 
 
 def get_current_pts(goal_name):
@@ -254,9 +255,9 @@ def update_time_goal(date=None):
                 goal_name, 'Hour Points', 
                 curr_pts - extra_pts, date
             )
-            update_control_key_result(goal_name, date)
         key_result_created = update_weekly_key_result(
             goal_name, 'Hour Points', pts, date)
+        update_control_key_result(goal_name, date)
         if 'err' in key_result_created:
             print(f'Key result of {goal_name} not generated.')
 
@@ -329,18 +330,21 @@ def create_weekly_goal(goal_name, goal_conf, start_date, end_date):
     description = f'{start_date} - {end_date}'
     goal_created = create_goal(goal_name, due_date, color, description)
     if not 'err' in goal_created:
-        create_weekly_key_result(goal_name, goal_created)
+        create_weekly_key_results(goal_name, goal_created)
         return get_goal_from_id(goal_created['goal']['id'])
 
     return goal_created
 
 
-def create_weekly_key_result(goal_name, goal_rec):
-    return create_key_result(goal_rec['goal']['id'], 'Hour Points', 0,
-                             calculate_points(goal_name), 'pts')
+def create_weekly_key_results(goal_name, goal_rec):
+    return [create_key_result(goal_rec['goal']['id'], 'Hour Points', 0,
+                             calculate_hour_points(goal_name), 'pts'),
+            create_key_result(goal_rec['goal']['id'], 'Control Points', 0,
+                             1, 'pts')
+    ]
 
 
-def calculate_points(goal_name):
+def calculate_hour_points(goal_name):
     conf = get_conf()
     goal_records = conf['Weekly goals update']['goals'][goal_name]['goal_records']
     sorted_goal_recs = goal_records.sort(
