@@ -33,6 +33,7 @@ class ClickUpExt(ClickUp):
         request = self._req(path, method="delete", **kwargs)
         return request if raw else request.json()
 
+
 def get_conf():
     conf_file = Path(__file__).parent / \
         f"../data/conf.json"
@@ -52,6 +53,7 @@ user = requests.get('https://api.clickup.com/api/v2/user',
                     headers=headers).json()
 team_id = clickup.teams[0].id
 
+
 def reference(clickup):
     main_team = clickup.teams[0]
     main_space = main_team.spaces[0]
@@ -65,10 +67,12 @@ def reference(clickup):
     tasks = main_list.get_all_tasks(include_closed=True)
     print(str(tasks))
 
+
 def get_data_from_project(project, file_name):
     proj_data_file = Path(__file__).parent / \
         f".../{project}/data/{file_name}"
     return json.load(proj_data_file.open())
+
 
 def update_conf(conf):
     conf_file = Path(__file__).parent / \
@@ -76,12 +80,14 @@ def update_conf(conf):
     json.dump(conf, conf_file.open('w+'))
     return get_conf()
 
+
 def resolve_data_file(file_name):
     write_file = Path(__file__).parent / \
         f'../data/{file_name}'.replace(':', '').replace(' ', '_')
 
     write_file.parent.mkdir(parents=True, exist_ok=True)
     return write_file
+
 
 def get_goal_from_id(goal_id):
     return requests.get(f'https://api.clickup.com/api/v2/goal/{goal_id}', headers=headers).json()
@@ -95,9 +101,11 @@ def get_all_goals():
         f'https://api.clickup.com/api/v2/team/{team_id}/goal', headers=headers).json()
     goal_list = goal_dict['goals']
 
-    goal_list = list(map(lambda goal_rec: get_goal_from_id(goal_rec['id']), goal_list))
+    goal_list = list(
+        map(lambda goal_rec: get_goal_from_id(goal_rec['id']), goal_list))
     json.dump(goal_list, file_data.open('w+'))
     return goal_list
+
 
 def get_date_change(day: str = None, start_day: str = 'Wed'):
     if not day:
@@ -200,6 +208,7 @@ def update_weekly_key_result(goal_name, key_result_name, steps_current, note):
     return clickup.put(
         f'https://api.clickup.com/api/v2/key_result/{key_result_habit_id}', json=key_result_habit_new).json()
 
+
 def update_control_key_result(goal_name, note):
     goal_rec = get_key_result_from_goal(goal_name)
 
@@ -211,14 +220,15 @@ def update_control_key_result(goal_name, note):
     if new_percent_completed > 0.995:
         new_percent_completed = 0.995
 
-    return update_weekly_key_result(goal_name, 'Control Points', 
-    new_percent_completed, note)
+    return update_weekly_key_result(goal_name, 'Control Points',
+                                    new_percent_completed, note)
 
 
 def get_current_pts(goal_name):
     goal_rec = get_goal_from_search(goal_name)
     key_result = get_key_result_from_goal(goal_rec, 'Hour Points')
     return key_result['steps_current']
+
 
 def check_for_extra(goal_name, key_result_name, date: str):
     goal_rec = get_goal_from_search(goal_name)
@@ -233,6 +243,7 @@ def check_for_extra(goal_name, key_result_name, date: str):
     if no_entry:
         return 'No entry'
     return net_change
+
 
 def update_time_goal(date=None):
     if not date:
@@ -252,7 +263,7 @@ def update_time_goal(date=None):
         curr_pts = get_current_pts(goal_name)
         if (extra_pts != 0.0 and extra_pts != 'No entry') and extra_pts != pts:
             update_weekly_key_result(
-                goal_name, 'Hour Points', 
+                goal_name, 'Hour Points',
                 curr_pts - extra_pts, date
             )
         key_result_created = update_weekly_key_result(
@@ -338,10 +349,10 @@ def create_weekly_goal(goal_name, goal_conf, start_date, end_date):
 
 def create_weekly_key_results(goal_name, goal_rec):
     return [create_key_result(goal_rec['goal']['id'], 'Hour Points', 0,
-                             calculate_hour_points(goal_name), 'pts'),
+                              calculate_hour_points(goal_name), 'pts'),
             create_key_result(goal_rec['goal']['id'], 'Control Points', 0,
-                             1, 'pts')
-    ]
+                              1, 'pts')
+            ]
 
 
 def calculate_hour_points(goal_name):
