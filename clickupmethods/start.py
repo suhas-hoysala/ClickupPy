@@ -387,8 +387,8 @@ def calculate_hour_points(goal_name):
     conf = get_conf()
     goal_records = conf['Weekly goals update']['goals'][goal_name]['goal_records']
 
-    goal_records.sort(key=
-    lambda item: dt.fromtimestamp(int(item['due_date'])/1000))
+    goal_records.sort(key=lambda item: dt.fromtimestamp(
+        int(item['due_date'])/1000))
     if not goal_records:
         return 1
     pts_list = [item['pts_achieved'] for item in goal_records[-5:]]
