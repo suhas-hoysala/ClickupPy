@@ -32,8 +32,8 @@ class ClickUpExt(ClickUp):
             print(f'Following error in request: {str(request)}')
             raise Exception()
 
-    @tenacity.retry(wait=tenacity.wait_fixed(60), 
-    stop=tenacity.stop_after_attempt(7))
+    @tenacity.retry(wait=tenacity.wait_fixed(60),
+                    stop=tenacity.stop_after_attempt(7))
     def delete(
         self, path: str, raw: bool = False, **kwargs
     ) -> Union[list, dict, Response]:
@@ -41,27 +41,27 @@ class ClickUpExt(ClickUp):
         request = self._req(path, method="delete", **kwargs)
         self.err_in_request(request)
         return request
-    
-    @tenacity.retry(wait=tenacity.wait_fixed(60), 
-    stop=tenacity.stop_after_attempt(7))
+
+    @tenacity.retry(wait=tenacity.wait_fixed(60),
+                    stop=tenacity.stop_after_attempt(7))
     def get(self: ClickUp, path: str, raw: bool = False, **kwargs
-    ) -> Union[list , dict , Response]:
+            ) -> Union[list, dict, Response]:
         request = super().get(path, **kwargs)
         self.err_in_request(request)
         return request
 
-    @tenacity.retry(wait=tenacity.wait_fixed(60), 
-    stop=tenacity.stop_after_attempt(7))
+    @tenacity.retry(wait=tenacity.wait_fixed(60),
+                    stop=tenacity.stop_after_attempt(7))
     def post(self: ClickUp, path: str, raw: bool = False, **kwargs
-    ) -> Union[list , dict , Response]:
+             ) -> Union[list, dict, Response]:
         request = super().post(path, **kwargs)
         self.err_in_request(request)
         return request
-    
-    @tenacity.retry(wait=tenacity.wait_fixed(60), 
-    stop=tenacity.stop_after_attempt(7))
+
+    @tenacity.retry(wait=tenacity.wait_fixed(60),
+                    stop=tenacity.stop_after_attempt(7))
     def put(self: ClickUp, path: str, raw: bool = False, **kwargs
-    ) -> Union[list , dict , Response]:
+            ) -> Union[list, dict, Response]:
         request = super().put(path, **kwargs)
         self.err_in_request(request)
         return request
@@ -399,10 +399,11 @@ def calculate_hour_points(goal_name):
     pts_list = [item['pts_achieved'] for item in sorted_goal_recs[-5:]]
     return sum(pts_list)/len(pts_list)
 
+
 def update_goal_hist(existing_goal_rec):
     if not existing_goal_rec:
         return None
-    
+
     goal_name = existing_goal_rec['goal']['name']
     key_result = get_key_result_from_goal(existing_goal_rec, 'Hour Points')
     pts_achieved = key_result['steps_current']
@@ -415,6 +416,7 @@ def update_goal_hist(existing_goal_rec):
         }
     )
     update_conf(conf)
+
 
 @limits(calls=15, period=60)
 def update_weekly_goals(day: str = None):
@@ -430,7 +432,7 @@ def update_weekly_goals(day: str = None):
             existing_goal_rec = get_goal_from_search(goal_name)
             existing_goal_rec = archive_goal(
                 existing_goal_rec) if existing_goal_rec else None
-            
+
             create_weekly_goal(goal_name, goal_conf,
                                start_date, end_date)
 
