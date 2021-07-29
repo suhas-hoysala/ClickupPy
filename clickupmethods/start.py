@@ -27,43 +27,35 @@ def get_parent_dir():
 
 
 class ClickUpExt(ClickUp):
-    def err_in_request(self, request):
-        if 'err' in request:
-            print(f'Following error in request: {str(request)}')
-            raise Exception()
 
-    @tenacity.retry(wait=tenacity.wait_fixed(60),
-                    stop=tenacity.stop_after_attempt(7))
+    @tenacity.retry(wait=tenacity.wait_fixed(15),
+                    stop=tenacity.stop_after_attempt(8))
     def delete(
         self, path: str, raw: bool = False, **kwargs
     ) -> Union[list, dict, Response]:
         """makes a put request to the API"""
         request = self._req(path, method="delete", **kwargs)
-        self.err_in_request(request)
         return request
 
-    @tenacity.retry(wait=tenacity.wait_fixed(60),
-                    stop=tenacity.stop_after_attempt(7))
+    @tenacity.retry(wait=tenacity.wait_fixed(15),
+                    stop=tenacity.stop_after_attempt(8))
     def get(self: ClickUp, path: str, raw: bool = False, **kwargs
             ) -> Union[list, dict, Response]:
         request = super().get(path, **kwargs)
-        self.err_in_request(request)
         return request
 
-    @tenacity.retry(wait=tenacity.wait_fixed(60),
-                    stop=tenacity.stop_after_attempt(7))
+    @tenacity.retry(wait=tenacity.wait_fixed(15),
+                    stop=tenacity.stop_after_attempt(8))
     def post(self: ClickUp, path: str, raw: bool = False, **kwargs
              ) -> Union[list, dict, Response]:
         request = super().post(path, **kwargs)
-        self.err_in_request(request)
         return request
 
-    @tenacity.retry(wait=tenacity.wait_fixed(60),
-                    stop=tenacity.stop_after_attempt(7))
+    @tenacity.retry(wait=tenacity.wait_fixed(15),
+                    stop=tenacity.stop_after_attempt(8))
     def put(self: ClickUp, path: str, raw: bool = False, **kwargs
             ) -> Union[list, dict, Response]:
         request = super().put(path, **kwargs)
-        self.err_in_request(request)
         return request
 
 
@@ -209,10 +201,11 @@ def get_time_limit_points(conf, goal_name, data, proj_list):
     return 0.0
 
 
-def get_last_time_points(conf, goal_name, data, proj_list):
+def get_last_time_points(data, proj_list):
     last_entry = None
     for proj in proj_list:
-        total_duration = 0
+        if not data[proj]:
+            continue
         final_proj_entry = data[proj][-1]
         if not last_entry or parser.parse(
                 final_proj_entry['stop']) > parser.parse(last_entry['stop']):
@@ -281,6 +274,7 @@ def check_for_extra(goal_name, key_result_name, date: str):
 def update_time_goal(date=None):
     if not date:
         date = datetime.strftime(datetime.now(), '%m-%d-%y')
+
     conf = get_conf()
     for goal_name, goal_conf in conf['Weekly goals update']['goals'].items():
         method_name = goal_conf["toggl_config"]["toggl_keyword"]
@@ -290,7 +284,7 @@ def update_time_goal(date=None):
         if goal_duration > 0:
             pts = get_time_limit_points(conf, goal_name, data, proj_list)
         else:
-            pts = get_last_time_points(conf, goal_name, data, proj_list)
+            pts = get_last_time_points(data, proj_list)
 
         extra_pts = check_for_extra(goal_name, 'Hour Points', date)
         curr_pts = get_current_pts(goal_name)
@@ -300,7 +294,7 @@ def update_time_goal(date=None):
                 curr_pts - extra_pts, date
             )
         key_result_created = update_weekly_key_result(
-            goal_name, 'Hour Points', pts, date)
+            goal_name, 'Hour Points', curr_pts + pts, date)
         if 'err' in key_result_created:
             print(f'Key result of {goal_name} not generated.')
         else:
@@ -392,11 +386,12 @@ def create_weekly_key_results(goal_name, goal_rec):
 def calculate_hour_points(goal_name):
     conf = get_conf()
     goal_records = conf['Weekly goals update']['goals'][goal_name]['goal_records']
-    sorted_goal_recs = goal_records.sort(
-        key=lambda item: parser.parse(item['end_date']))
-    if not sorted_goal_recs:
+
+    goal_records.sort(key=
+    lambda item: dt.fromtimestamp(int(item['due_date'])/1000))
+    if not goal_records:
         return 1
-    pts_list = [item['pts_achieved'] for item in sorted_goal_recs[-5:]]
+    pts_list = [item['pts_achieved'] for item in goal_records[-5:]]
     return sum(pts_list)/len(pts_list)
 
 
@@ -405,6 +400,7 @@ def update_goal_hist(existing_goal_rec):
         return None
 
     goal_name = existing_goal_rec['goal']['name']
+    due_date = existing_goal_rec['goal']['due_date']
     key_result = get_key_result_from_goal(existing_goal_rec, 'Hour Points')
     pts_achieved = key_result['steps_current']
     completed = key_result['completed']
@@ -412,13 +408,13 @@ def update_goal_hist(existing_goal_rec):
     conf['Weekly goals update']['goals'][goal_name]['goal_records'].append(
         {
             'pts_achieved': pts_achieved,
-            'completed': completed
+            'completed': completed,
+            'due_date': due_date
         }
     )
     update_conf(conf)
 
 
-@limits(calls=15, period=60)
 def update_weekly_goals(day: str = None):
     conf = get_conf()
 
@@ -432,12 +428,14 @@ def update_weekly_goals(day: str = None):
             existing_goal_rec = get_goal_from_search(goal_name)
             existing_goal_rec = archive_goal(
                 existing_goal_rec) if existing_goal_rec else None
+            update_goal_hist(existing_goal_rec)
 
             create_weekly_goal(goal_name, goal_conf,
                                start_date, end_date)
 
     dates_of_week = [parser.parse(start_date) + datetime.timedelta(days=x)
-                     for x in range(0, (parser.parse(end_date)-parser.parse(start_date)).days)]
+                     for x in range(0, (parser.parse(end_date)-parser.parse(start_date)).days+1)]
+
     for date in dates_of_week:
         update_time_goal(dt.strftime(date, '%m-%d-%y'))
 
@@ -454,4 +452,4 @@ with (Path(__file__).parent / f'data/goals.json').open('w+') as file:
     file.write(json.dumps(requests.get(f'https://api.clickup.com/api/v2/team/{team_id}/goal')))
 """
 
-update_weekly_goals('7-26-21')
+update_weekly_goals()
