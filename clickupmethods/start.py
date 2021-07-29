@@ -11,6 +11,7 @@ import os
 from arrow import Arrow
 from togglmethods.drivers import *
 import decimal
+import tenacity
 
 methods_map = {
     "morning": morning_time_entries,
@@ -26,12 +27,44 @@ def get_parent_dir():
 
 
 class ClickUpExt(ClickUp):
+    def err_in_request(self, request):
+        if 'err' in request:
+            print(f'Following error in request: {str(request)}')
+            raise Exception()
+
+    @tenacity.retry(wait=tenacity.wait_fixed(60), 
+    stop=tenacity.stop_after_attempt(7))
     def delete(
         self, path: str, raw: bool = False, **kwargs
     ) -> Union[list, dict, Response]:
         """makes a put request to the API"""
         request = self._req(path, method="delete", **kwargs)
-        return request if raw else request.json()
+        self.err_in_request(request)
+        return request
+    
+    @tenacity.retry(wait=tenacity.wait_fixed(60), 
+    stop=tenacity.stop_after_attempt(7))
+    def get(self: ClickUp, path: str, raw: bool = False, **kwargs
+    ) -> Union[list , dict , Response]:
+        request = super().get(path, **kwargs)
+        self.err_in_request(request)
+        return request
+
+    @tenacity.retry(wait=tenacity.wait_fixed(60), 
+    stop=tenacity.stop_after_attempt(7))
+    def post(self: ClickUp, path: str, raw: bool = False, **kwargs
+    ) -> Union[list , dict , Response]:
+        request = super().post(path, **kwargs)
+        self.err_in_request(request)
+        return request
+    
+    @tenacity.retry(wait=tenacity.wait_fixed(60), 
+    stop=tenacity.stop_after_attempt(7))
+    def put(self: ClickUp, path: str, raw: bool = False, **kwargs
+    ) -> Union[list , dict , Response]:
+        request = super().put(path, **kwargs)
+        self.err_in_request(request)
+        return request
 
 
 def get_conf():
@@ -49,8 +82,7 @@ headers = {
 }
 
 clickup = ClickUpExt(api_token)
-user = requests.get('https://api.clickup.com/api/v2/user',
-                    headers=headers).json()
+user = clickup.get('https://api.clickup.com/api/v2/user')
 team_id = clickup.teams[0].id
 
 
@@ -90,15 +122,15 @@ def resolve_data_file(file_name):
 
 
 def get_goal_from_id(goal_id):
-    return requests.get(f'https://api.clickup.com/api/v2/goal/{goal_id}', headers=headers).json()
+    return clickup.get(f'https://api.clickup.com/api/v2/goal/{goal_id}')
 
 
 def get_all_goals():
     date = dt.strftime(dt.now(), '%m-%d-%y')
     file_name = f'{date}_all_goals.json'
     file_data = resolve_data_file(file_name)
-    goal_dict = requests.get(
-        f'https://api.clickup.com/api/v2/team/{team_id}/goal', headers=headers).json()
+    goal_dict = clickup.get(
+        f'https://api.clickup.com/api/v2/team/{team_id}/goal')
     goal_list = goal_dict['goals']
 
     goal_list = list(
@@ -128,7 +160,7 @@ def determine_if_change():
 
 
 def get_goal_from_id(goal_id):
-    return requests.get(f'https://api.clickup.com/api/v2/goal/{goal_id}', headers=headers).json()
+    return clickup.get(f'https://api.clickup.com/api/v2/goal/{goal_id}')
 
 
 def get_goal_from_search(goal_search, description=None):
@@ -206,19 +238,20 @@ def update_weekly_key_result(goal_name, key_result_name, steps_current, note):
     }
 
     return clickup.put(
-        f'https://api.clickup.com/api/v2/key_result/{key_result_habit_id}', json=key_result_habit_new).json()
+        f'https://api.clickup.com/api/v2/key_result/{key_result_habit_id}', json=key_result_habit_new)
 
 
 def update_control_key_result(goal_name, note):
-    goal_rec = get_key_result_from_goal(goal_name)
+    goal_rec = get_goal_from_search(goal_name)
+    key_result = get_key_result_from_goal(goal_rec, 'Hour Points')
 
-    percent_completed = goal_rec['goal']['percent_completed']
+    percent_completed = key_result['percent_completed']
     decimal.getcontext().rounding = decimal.ROUND_DOWN
     new_percent_completed_dec = decimal.Decimal(percent_completed)
     new_percent_completed = float(round(new_percent_completed_dec, 2))
 
-    if new_percent_completed > 0.995:
-        new_percent_completed = 0.995
+    if new_percent_completed > 0.99:
+        new_percent_completed = 0.99
 
     return update_weekly_key_result(goal_name, 'Control Points',
                                     new_percent_completed, note)
@@ -268,9 +301,10 @@ def update_time_goal(date=None):
             )
         key_result_created = update_weekly_key_result(
             goal_name, 'Hour Points', pts, date)
-        update_control_key_result(goal_name, date)
         if 'err' in key_result_created:
             print(f'Key result of {goal_name} not generated.')
+        else:
+            update_control_key_result(goal_name, date)
 
 
 def update_song_count():
@@ -382,6 +416,7 @@ def update_goal_hist(existing_goal_rec):
     )
     update_conf(conf)
 
+@limits(calls=15, period=60)
 def update_weekly_goals(day: str = None):
     conf = get_conf()
 
