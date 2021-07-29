@@ -288,17 +288,20 @@ def update_time_goal(date=None):
 
         extra_pts = check_for_extra(goal_name, 'Hour Points', date)
         curr_pts = get_current_pts(goal_name)
-        if (extra_pts != 0.0 and extra_pts != 'No entry') and extra_pts != pts:
+        if extra_pts != 'No entry' and extra_pts > 0.001 and abs(extra_pts - pts) > 0.001:
             update_weekly_key_result(
                 goal_name, 'Hour Points',
                 curr_pts - extra_pts, date
             )
-        key_result_created = update_weekly_key_result(
-            goal_name, 'Hour Points', curr_pts + pts, date)
-        if 'err' in key_result_created:
-            print(f'Key result of {goal_name} not generated.')
-        else:
-            update_control_key_result(goal_name, date)
+        if (extra_pts != 'No entry' and abs(
+            extra_pts - pts) > 0.001) or extra_pts == 'No entry':
+            key_result_created = update_weekly_key_result(
+                goal_name, 'Hour Points', curr_pts + pts, date)
+            if 'err' in key_result_created:
+                print(f'Key result of {goal_name} not generated.')
+            else:
+                update_control_key_result(goal_name, date)
+            
 
 
 def update_song_count():
@@ -434,7 +437,7 @@ def update_weekly_goals(day: str = None):
                                start_date, end_date)
 
     dates_of_week = [parser.parse(start_date) + datetime.timedelta(days=x)
-                     for x in range(0, (parser.parse(end_date)-parser.parse(start_date)).days+1)]
+                     for x in range(0, (parser.parse(day)-parser.parse(start_date)).days+1)]
 
     for date in dates_of_week:
         update_time_goal(dt.strftime(date, '%m-%d-%y'))
