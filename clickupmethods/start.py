@@ -12,6 +12,7 @@ from arrow import Arrow
 from togglmethods.drivers import *
 import decimal
 import tenacity
+import spotifymethods
 
 methods_map = {
     "morning": morning_time_entries,
@@ -94,7 +95,7 @@ def reference(clickup):
 
 def get_data_from_project(project, file_name):
     proj_data_file = Path(__file__).parent / \
-        f".../{project}/data/{file_name}"
+        f"../../{project}/data/{file_name}"
     return json.load(proj_data_file.open())
 
 
@@ -216,6 +217,14 @@ def get_last_time_points(data, proj_list):
     goal_finish_time = parser.parse(last_entry['stop'])
     return time_completed_to_points(goal_finish_time)
 
+def update_key_result(key_result_id, steps_current, note):
+    key_result_habit_new = {
+        'steps_current': steps_current,
+        'note': note
+    }
+
+    return clickup.put(
+        f'https://api.clickup.com/api/v2/key_result/{key_result_id}', json=key_result_habit_new)
 
 def update_weekly_key_result(goal_name, key_result_name, steps_current, note):
     goal_rec = get_goal_from_search(goal_name)
@@ -305,19 +314,41 @@ def update_time_goal(date=None):
 
 
 def update_song_count():
-    deduped_song_file = get_data_from_project(
-        'Spotipy', 'deduped_songs_list.json')
-    deduped_songs = json.load(deduped_song_file)
+    deduped_songs = spotifymethods.TodoSpotify.SongCountUpdater.get_deduped_songs_list()
     deduped_songs_len = len(deduped_songs)
 
     conf = get_conf()
-    note = datetime.strftime(datetime.now(), '%m-%d-%y')
-    check_for_extra(conf['Weekly goals update']['song_habit']['name'],
-                    conf['song_habit']['key_result_count'],
-                    note)
+    note = dt.strftime(dt.now(), '%m-%d-%y')
+    
     return update_weekly_key_result(conf['Weekly goals update']['song_habit']['name'],
-                                    conf['song_habit']['key_result_count'],
+                                    conf['Weekly goals update']['song_habit']['key_result_count'],
                                     deduped_songs_len, note)
+
+def update_song_artists_count():
+    conf = get_conf()
+    target = 30
+    target_artists_count = spotifymethods.TodoSpotify.SongCountUpdater.get_target_artists_count()
+    goal_rec = get_goal_from_search(conf['Weekly goals update']['song_habit']['name'])
+    key_result_dict = {
+        key_result['name']: key_result for key_result in goal_rec['goal']['key_results']
+        if str(key_result['name']).endswith('song count')
+    }
+    date = dt.strftime(dt.now(), '%m-%d-%y')
+    for artist_name, artist_count in target_artists_count.items():
+        if artist_name == 'Dire Straits':
+            print("", end="")
+        key_result_name = f'{artist_name} song count'
+        if not key_result_name in key_result_dict:
+            key_result = create_key_result(goal_rec['goal']['id'], key_result_name, 0, target, 'songs')
+            update_key_result(key_result['key_result']['id'], artist_count, date)
+        else:
+            key_result = key_result_dict[key_result_name]
+            update_key_result(key_result['id'], artist_count, date)
+            key_result_dict.pop(key_result_name)
+    
+    for remaining_artist_name, remaining_key_result in key_result_dict.items():
+        key_result_id = remaining_key_result['id']
+        clickup.delete(f'https://api.clickup.com/api/v2/key_result/{key_result_id}')
 
 
 def archive_goal(goal_rec):
@@ -455,4 +486,6 @@ with (Path(__file__).parent / f'data/goals.json').open('w+') as file:
     file.write(json.dumps(requests.get(f'https://api.clickup.com/api/v2/team/{team_id}/goal')))
 """
 
-update_weekly_goals()
+#update_weekly_goals()
+#update_song_count()
+#update_song_artists_count()
