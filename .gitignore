@@ -3,3 +3,4 @@ data/
 .metals
 *.pyc
 .cache*
+drivers.py
