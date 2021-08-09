@@ -156,7 +156,7 @@ def get_goal_from_search(goal_search, description=None):
     if type(goal_search) == str:
         search_list = [
             goal_rec for goal_rec in goals if goal_rec['goal']['name'] == goal_search
-            and (not description or goal_rec['goal']['description'] == description)
+            and (not description or str(goal_rec['goal']['description']).strip() == description)
         ]
         return search_list[0] if search_list else None
 
@@ -483,4 +483,3 @@ def archive_historical_goals():
 with (Path(__file__).parent / f'data/goals.json').open('w+') as file:
     file.write(json.dumps(requests.get(f'https://api.clickup.com/api/v2/team/{team_id}/goal')))
 """
-update_weekly_goals()
