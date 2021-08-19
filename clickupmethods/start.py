@@ -168,7 +168,8 @@ def get_key_result_from_goal(goal_rec, key_result_search):
     key_results = goal_rec['goal']['key_results']
 
     if type(key_result_search) == str:
-        return [goal_rec for goal_rec in key_results if goal_rec['name'] == key_result_search][0]
+        key_result_list = [goal_rec for goal_rec in key_results if goal_rec['name'] == key_result_search]
+        return key_result_list[0] if key_result_list else None
 
     elif type(key_result_search) == list:
         return [goal_rec for goal_rec in key_results if goal_rec['name'] in key_result_search]
@@ -184,6 +185,8 @@ def get_time_limit_points(conf, goal_name, data, proj_list):
         goal_name]['toggl_config']['duration']
     total_duration = 0.0
     for proj in proj_list:
+        if not proj in data:
+            continue
         for entry in data[proj]:
             total_duration += entry['duration']/60.0
             if total_duration >= goal_duration:
@@ -200,7 +203,7 @@ def get_time_limit_points(conf, goal_name, data, proj_list):
 def get_last_time_points(data, proj_list):
     last_entry = None
     for proj in proj_list:
-        if not data[proj]:
+        if not proj in data or not data[proj]:
             continue
         final_proj_entry = data[proj][-1]
         if not last_entry or parser.parse(
@@ -225,9 +228,14 @@ def update_key_result(key_result_id, steps_current, note):
 
 def update_weekly_key_result(goal_name, key_result_name, steps_current, note):
     goal_rec = get_goal_from_search(goal_name)
+    if not goal_rec:
+        return {}
 
     key_result_habit = get_key_result_from_goal(
         goal_rec, key_result_name)
+
+    if not key_result_habit:
+        key_result_habit = create_key_result(goal_rec['goal']['id'], key_result_name, 0.0, 1.0, 'pts')
 
     key_result_habit_id = key_result_habit['id']
 
@@ -333,8 +341,6 @@ def update_song_artists_count():
     }
     date = dt.strftime(dt.now(), '%m-%d-%y')
     for artist_name, artist_count in target_artists_count.items():
-        if artist_name == 'Dire Straits':
-            print("", end="")
         key_result_name = f'{artist_name} song count'
         if not key_result_name in key_result_dict:
             key_result = create_key_result(goal_rec['goal']['id'], key_result_name, 0, target, 'songs')
@@ -378,6 +384,8 @@ def create_goal(goal_name, due_date: str, color=None, description=''):
 
 
 def create_key_result(goal_id, name, steps_start, steps_end, unit):
+    if get_key_result_from_goal(get_goal_from_id(goal_id), name):
+        return {}
     key_result = {
         "name": name,
         "owners": [
@@ -411,7 +419,7 @@ def create_weekly_key_results(goal_name, goal_rec):
     return [create_key_result(goal_rec['goal']['id'], 'Hour Points', 0,
                               calculate_hour_points(goal_name), 'pts'),
             create_key_result(goal_rec['goal']['id'], 'Control Points', 0,
-                              1, 'pts')
+                              1.0, 'pts')
             ]
 
 
