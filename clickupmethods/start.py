@@ -180,12 +180,12 @@ def time_completed_to_points(dt: datetime):
     return (24 - dt_reg.hour) - dt_reg.minute/60 - dt_reg.second/3600
 
 
-def get_time_limit_points(conf, goal_duration, data, proj_list, task_list):
+def get_time_limit_points(conf, goal_duration, data, proj_list, task_names):
     total_duration = 0.0
     for proj in proj_list:
         if not proj in data:
             continue
-        rel_tasks = [rec for rec in data if not task_list or any([name in rec['description'] for name in task_list])]
+        rel_tasks = [rec for rec in data[proj] if not task_names or any([name in rec['description'] for name in task_names])]
         for entry in rel_tasks:
             total_duration += entry['duration']/60.0
             if total_duration >= goal_duration:
@@ -199,13 +199,12 @@ def get_time_limit_points(conf, goal_duration, data, proj_list, task_list):
     return 0.0
 
 
-def get_last_time_points(data, goal_name, proj_list,  task_list):
+def get_last_time_points(data, proj_list,  task_names):
     last_entry = None
     for proj in proj_list:
         if not proj in data or not data[proj]:
             continue
-        
-        rel_tasks = [rec for rec in data if not task_list or any([name in rec['description'] for name in task_list])]
+        rel_tasks = [rec for rec in data[proj] if not task_names or any([name in rec['description'] for name in task_names])]
         final_proj_entry = rel_tasks[-1]
         if not last_entry or parser.parse(
                 final_proj_entry['stop']) > parser.parse(last_entry['stop']):
