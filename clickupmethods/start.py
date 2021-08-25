@@ -29,6 +29,8 @@ def get_parent_dir():
 
 class ClickUpExt(ClickUp):
 
+    class ErrException(Exception):
+        pass
     @tenacity.retry(wait=tenacity.wait_fixed(15),
                     stop=tenacity.stop_after_attempt(8))
     def delete(
@@ -36,6 +38,8 @@ class ClickUpExt(ClickUp):
     ) -> Union[list, dict, Response]:
         """makes a put request to the API"""
         request = self._req(path, method="delete", **kwargs)
+        if 'err' in request:
+            raise ClickUpExt.ErrException()
         return request
 
     @tenacity.retry(wait=tenacity.wait_fixed(15),
@@ -43,6 +47,8 @@ class ClickUpExt(ClickUp):
     def get(self: ClickUp, path: str, raw: bool = False, **kwargs
             ) -> Union[list, dict, Response]:
         request = super().get(path, **kwargs)
+        if 'err' in request:
+            raise ClickUpExt.ErrException()
         return request
 
     @tenacity.retry(wait=tenacity.wait_fixed(15),
@@ -50,6 +56,8 @@ class ClickUpExt(ClickUp):
     def post(self: ClickUp, path: str, raw: bool = False, **kwargs
              ) -> Union[list, dict, Response]:
         request = super().post(path, **kwargs)
+        if 'err' in request:
+            raise ClickUpExt.ErrException()
         return request
 
     @tenacity.retry(wait=tenacity.wait_fixed(15),
@@ -57,8 +65,9 @@ class ClickUpExt(ClickUp):
     def put(self: ClickUp, path: str, raw: bool = False, **kwargs
             ) -> Union[list, dict, Response]:
         request = super().put(path, **kwargs)
+        if 'err' in request:
+            raise ClickUpExt.ErrException()
         return request
-
 
 def get_conf():
     conf_file = Path(__file__).parent / \
