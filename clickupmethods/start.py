@@ -39,6 +39,8 @@ class ClickUpExt(ClickUp):
         """makes a put request to the API"""
         request = self._req(path, method="delete", **kwargs)
         if 'err' in request:
+            if self.delete.retry.statistics['attempt_number'] == 8:
+                return request
             raise ClickUpExt.ErrException()
         return request
 
@@ -48,6 +50,8 @@ class ClickUpExt(ClickUp):
             ) -> Union[list, dict, Response]:
         request = super().get(path, **kwargs)
         if 'err' in request:
+            if self.get.retry.statistics['attempt_number'] == 8:
+                return request
             raise ClickUpExt.ErrException()
         return request
 
@@ -57,6 +61,8 @@ class ClickUpExt(ClickUp):
              ) -> Union[list, dict, Response]:
         request = super().post(path, **kwargs)
         if 'err' in request:
+            if self.post.retry.statistics['attempt_number'] == 8:
+                return request
             raise ClickUpExt.ErrException()
         return request
 
@@ -66,6 +72,8 @@ class ClickUpExt(ClickUp):
             ) -> Union[list, dict, Response]:
         request = super().put(path, **kwargs)
         if 'err' in request:
+            if self.put.retry.statistics['attempt_number'] == 8:
+                return request
             raise ClickUpExt.ErrException()
         return request
 
