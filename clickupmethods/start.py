@@ -180,14 +180,13 @@ def time_completed_to_points(dt: datetime):
     return (24 - dt_reg.hour) - dt_reg.minute/60 - dt_reg.second/3600
 
 
-def get_time_limit_points(conf, goal_name, data, proj_list):
-    goal_duration = conf['Weekly goals update']['goals'][
-        goal_name]['toggl_config']['duration']
+def get_time_limit_points(conf, goal_duration, data, proj_list, task_list):
     total_duration = 0.0
     for proj in proj_list:
         if not proj in data:
             continue
-        for entry in data[proj]:
+        rel_tasks = [rec for rec in data if not task_list or any([name in rec['description'] for name in task_list])]
+        for entry in rel_tasks:
             total_duration += entry['duration']/60.0
             if total_duration >= goal_duration:
                 extra = total_duration - goal_duration
@@ -200,12 +199,14 @@ def get_time_limit_points(conf, goal_name, data, proj_list):
     return 0.0
 
 
-def get_last_time_points(data, proj_list):
+def get_last_time_points(data, goal_name, proj_list,  task_list):
     last_entry = None
     for proj in proj_list:
         if not proj in data or not data[proj]:
             continue
-        final_proj_entry = data[proj][-1]
+        
+        rel_tasks = [rec for rec in data if not task_list or any([name in rec['description'] for name in task_list])]
+        final_proj_entry = rel_tasks[-1]
         if not last_entry or parser.parse(
                 final_proj_entry['stop']) > parser.parse(last_entry['stop']):
             last_entry = final_proj_entry
@@ -295,10 +296,11 @@ def update_time_goal(date=None):
         data = methods_map[method_name](date)
         goal_duration = goal_conf['toggl_config']['duration']
         proj_list = conf['Weekly goals update'][goal_conf['toggl_config']['projects']]
+        task_names = goal_conf['toggl_config']['names']
         if goal_duration > 0:
-            pts = get_time_limit_points(conf, goal_name, data, proj_list)
+            pts = get_time_limit_points(conf, goal_duration, data, proj_list, task_names)
         else:
-            pts = get_last_time_points(data, proj_list)
+            pts = get_last_time_points(data, proj_list, task_names)
 
         extra_pts = check_for_extra(goal_name, 'Hour Points', date)
         curr_pts = get_current_pts(goal_name)
