@@ -1,18 +1,15 @@
-from pyclickup import ClickUp
 import json
-from typing import Union
-from requests.models import Response
 from pathlib import Path
-from datetime import datetime as dt, timedelta, timezone
+import datetime
 from datetime import date
 from dateutil import parser
 import random
 import os
-from arrow import Arrow
 from togglmethods.drivers import *
 import decimal
-import tenacity
 import spotifymethods
+from clickupmethods.clickupext import ClickUpExt
+from clickupmethods.utilmethods import *
 
 methods_map = {
     "morning": morning_time_entries,
@@ -26,56 +23,6 @@ methods_map = {
 def get_parent_dir():
     return os.path.dirname(os.path.realpath(__file__))
 
-
-class ClickUpExt(ClickUp):
-
-    class ErrException(Exception):
-        pass
-    @tenacity.retry(wait=tenacity.wait_fixed(15),
-                    stop=tenacity.stop_after_attempt(8))
-    def delete(
-        self, path: str, raw: bool = False, **kwargs
-    ) -> Union[list, dict, Response]:
-        """makes a put request to the API"""
-        request = self._req(path, method="delete", **kwargs)
-        if 'err' in request:
-            if self.delete.retry.statistics['attempt_number'] == 8:
-                return request
-            raise ClickUpExt.ErrException()
-        return request
-
-    @tenacity.retry(wait=tenacity.wait_fixed(15),
-                    stop=tenacity.stop_after_attempt(8))
-    def get(self: ClickUp, path: str, raw: bool = False, **kwargs
-            ) -> Union[list, dict, Response]:
-        request = super().get(path, **kwargs)
-        if 'err' in request:
-            if self.get.retry.statistics['attempt_number'] == 8:
-                return request
-            raise ClickUpExt.ErrException()
-        return request
-
-    @tenacity.retry(wait=tenacity.wait_fixed(15),
-                    stop=tenacity.stop_after_attempt(8))
-    def post(self: ClickUp, path: str, raw: bool = False, **kwargs
-             ) -> Union[list, dict, Response]:
-        request = super().post(path, **kwargs)
-        if 'err' in request:
-            if self.post.retry.statistics['attempt_number'] == 8:
-                return request
-            raise ClickUpExt.ErrException()
-        return request
-
-    @tenacity.retry(wait=tenacity.wait_fixed(15),
-                    stop=tenacity.stop_after_attempt(8))
-    def put(self: ClickUp, path: str, raw: bool = False, **kwargs
-            ) -> Union[list, dict, Response]:
-        request = super().put(path, **kwargs)
-        if 'err' in request:
-            if self.put.retry.statistics['attempt_number'] == 8:
-                return request
-            raise ClickUpExt.ErrException()
-        return request
 
 def get_conf():
     conf_file = Path(__file__).parent / \
@@ -154,8 +101,8 @@ def get_date_change(day: str = None, start_day: str = 'Wed'):
 
     start_day_offset = (day.weekday() - start_day) % 7
     end_day_offset = -(day.weekday() - (start_day-1)) % 7
-    start_day_date = day - timedelta(days=start_day_offset)
-    end_day_date = day + timedelta(days=end_day_offset)
+    start_day_date = day - datetime.timedelta(days=start_day_offset)
+    end_day_date = day + datetime.timedelta(days=end_day_offset)
 
     return f'{start_day_date.month}-{start_day_date.day}-{start_day_date.year}', f'{end_day_date.month}-{end_day_date.day}-{end_day_date.year}'
 
@@ -191,48 +138,6 @@ def get_key_result_from_goal(goal_rec, key_result_search):
     elif type(key_result_search) == list:
         return [goal_rec for goal_rec in key_results if goal_rec['name'] in key_result_search]
 
-
-def time_completed_to_points(dt: datetime):
-    dt_reg = Arrow.fromdatetime(dt, 'America/New_York').datetime
-    return (24 - dt_reg.hour) - dt_reg.minute/60 - dt_reg.second/3600
-
-
-def get_time_limit_points(conf, goal_duration, data, proj_list, task_names):
-    total_duration = 0.0
-    for proj in proj_list:
-        if not proj in data:
-            continue
-        rel_tasks = [rec for rec in data[proj] if not task_names or any([name in rec['description'] for name in task_names])]
-        for entry in rel_tasks:
-            total_duration += entry['duration']/60.0
-            if total_duration >= goal_duration:
-                extra = total_duration - goal_duration
-                goal_finish_time = parser.parse(
-                    entry['stop']) - timedelta(minutes=extra)
-                goal_finish_time = goal_finish_time.replace(
-                    tzinfo=timezone.utc).astimezone(tz=None)
-                return_value = time_completed_to_points(goal_finish_time)
-                return return_value
-    return 0.0
-
-
-def get_last_time_points(data, proj_list,  task_names):
-    last_entry = None
-    for proj in proj_list:
-        if not proj in data or not data[proj]:
-            continue
-        rel_tasks = [rec for rec in data[proj] if not task_names or any([name in rec['description'] for name in task_names])]
-        final_proj_entry = rel_tasks[-1]
-        if not last_entry or parser.parse(
-                final_proj_entry['stop']) > parser.parse(last_entry['stop']):
-            last_entry = final_proj_entry
-    if not last_entry:
-        return 0.0
-
-    goal_finish_time = parser.parse(last_entry['stop'])
-    goal_finish_time = goal_finish_time.replace(
-        tzinfo=timezone.utc).astimezone(tz=None)
-    return time_completed_to_points(goal_finish_time)
 
 def update_key_result(key_result_id, steps_current, note):
     key_result_habit_new = {
@@ -314,9 +219,9 @@ def update_time_goal(date=None):
         proj_list = conf['Weekly goals update'][goal_conf['toggl_config']['projects']]
         task_names = goal_conf['toggl_config']['names']
         if goal_duration > 0:
-            pts = get_time_limit_points(conf, goal_duration, data, proj_list, task_names)
+            pts = PointsUpdate.get_time_limit_points(conf, goal_duration, data, proj_list, task_names)
         else:
-            pts = get_last_time_points(data, proj_list, task_names)
+            pts = PointsUpdate.get_last_time_points(data, proj_list, task_names)
 
         extra_pts = check_for_extra(goal_name, 'Hour Points', date)
         curr_pts = get_current_pts(goal_name)

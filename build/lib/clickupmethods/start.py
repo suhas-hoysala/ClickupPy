@@ -29,6 +29,8 @@ def get_parent_dir():
 
 class ClickUpExt(ClickUp):
 
+    class ErrException(Exception):
+        pass
     @tenacity.retry(wait=tenacity.wait_fixed(15),
                     stop=tenacity.stop_after_attempt(8))
     def delete(
@@ -36,6 +38,10 @@ class ClickUpExt(ClickUp):
     ) -> Union[list, dict, Response]:
         """makes a put request to the API"""
         request = self._req(path, method="delete", **kwargs)
+        if 'err' in request:
+            if self.delete.retry.statistics['attempt_number'] == 8:
+                return request
+            raise ClickUpExt.ErrException()
         return request
 
     @tenacity.retry(wait=tenacity.wait_fixed(15),
@@ -43,6 +49,10 @@ class ClickUpExt(ClickUp):
     def get(self: ClickUp, path: str, raw: bool = False, **kwargs
             ) -> Union[list, dict, Response]:
         request = super().get(path, **kwargs)
+        if 'err' in request:
+            if self.get.retry.statistics['attempt_number'] == 8:
+                return request
+            raise ClickUpExt.ErrException()
         return request
 
     @tenacity.retry(wait=tenacity.wait_fixed(15),
@@ -50,6 +60,10 @@ class ClickUpExt(ClickUp):
     def post(self: ClickUp, path: str, raw: bool = False, **kwargs
              ) -> Union[list, dict, Response]:
         request = super().post(path, **kwargs)
+        if 'err' in request:
+            if self.post.retry.statistics['attempt_number'] == 8:
+                return request
+            raise ClickUpExt.ErrException()
         return request
 
     @tenacity.retry(wait=tenacity.wait_fixed(15),
@@ -57,8 +71,11 @@ class ClickUpExt(ClickUp):
     def put(self: ClickUp, path: str, raw: bool = False, **kwargs
             ) -> Union[list, dict, Response]:
         request = super().put(path, **kwargs)
+        if 'err' in request:
+            if self.put.retry.statistics['attempt_number'] == 8:
+                return request
+            raise ClickUpExt.ErrException()
         return request
-
 
 def get_conf():
     conf_file = Path(__file__).parent / \
@@ -180,14 +197,13 @@ def time_completed_to_points(dt: datetime):
     return (24 - dt_reg.hour) - dt_reg.minute/60 - dt_reg.second/3600
 
 
-def get_time_limit_points(conf, goal_name, data, proj_list):
-    goal_duration = conf['Weekly goals update']['goals'][
-        goal_name]['toggl_config']['duration']
+def get_time_limit_points(conf, goal_duration, data, proj_list, task_names):
     total_duration = 0.0
     for proj in proj_list:
         if not proj in data:
             continue
-        for entry in data[proj]:
+        rel_tasks = [rec for rec in data[proj] if not task_names or any([name in rec['description'] for name in task_names])]
+        for entry in rel_tasks:
             total_duration += entry['duration']/60.0
             if total_duration >= goal_duration:
                 extra = total_duration - goal_duration
@@ -200,12 +216,13 @@ def get_time_limit_points(conf, goal_name, data, proj_list):
     return 0.0
 
 
-def get_last_time_points(data, proj_list):
+def get_last_time_points(data, proj_list,  task_names):
     last_entry = None
     for proj in proj_list:
         if not proj in data or not data[proj]:
             continue
-        final_proj_entry = data[proj][-1]
+        rel_tasks = [rec for rec in data[proj] if not task_names or any([name in rec['description'] for name in task_names])]
+        final_proj_entry = rel_tasks[-1]
         if not last_entry or parser.parse(
                 final_proj_entry['stop']) > parser.parse(last_entry['stop']):
             last_entry = final_proj_entry
@@ -295,10 +312,11 @@ def update_time_goal(date=None):
         data = methods_map[method_name](date)
         goal_duration = goal_conf['toggl_config']['duration']
         proj_list = conf['Weekly goals update'][goal_conf['toggl_config']['projects']]
+        task_names = goal_conf['toggl_config']['names']
         if goal_duration > 0:
-            pts = get_time_limit_points(conf, goal_name, data, proj_list)
+            pts = get_time_limit_points(conf, goal_duration, data, proj_list, task_names)
         else:
-            pts = get_last_time_points(data, proj_list)
+            pts = get_last_time_points(data, proj_list, task_names)
 
         extra_pts = check_for_extra(goal_name, 'Hour Points', date)
         curr_pts = get_current_pts(goal_name)
