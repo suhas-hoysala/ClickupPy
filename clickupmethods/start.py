@@ -8,7 +8,6 @@ from datetime import date
 from dateutil import parser
 import random
 import os
-from arrow import Arrow
 from togglmethods.drivers import *
 import decimal
 import tenacity
@@ -21,7 +20,6 @@ methods_map = {
     "afternoon": afternoon_time_entries,
     "weekly": weekly_time_entries
 }
-
 
 def get_parent_dir():
     return os.path.dirname(os.path.realpath(__file__))
@@ -110,6 +108,37 @@ def reference(clickup):
     print(str(tasks))
 
 
+def get_time_tracking_data(start_time: dt, end_time: dt):
+    start_time_ms = str(int(start_time.timestamp()*1000))
+    end_time_ms = str(int(end_time.timestamp()*1000))
+    return clickup.get(f'https://api.clickup.com/api/v2/team/{team_id}/time_entries?start_date={start_time_ms}&end_date={end_time_ms}')
+
+def get_day_time_tracking_data(day: dt = dt.now()):
+    dt_of_day = dt(day.year, day.month, day.day).replace(tzinfo=None).astimezone(tz=timezone.utc)
+    return get_time_tracking_data(dt_of_day, dt_of_day + timedelta(days=1))
+
+def export_time_tracking_data(day: dt = dt.now()):
+    clickup_time_data = get_day_time_tracking_data(day)
+    if not 'data' in clickup_time_data:
+        return
+    for rec in clickup_time_data['data']:
+        name = rec['task']['name']
+        start = dt.fromtimestamp(int(rec['start'])/1000)
+        duration = int(int(rec['duration'])/1000)
+        tags = [str(rec['id']), str(rec['task']['id'])]
+        if not validate_task(rec):
+            print(create_time_entry(name, start, duration, tags=tags))
+    pass
+
+def validate_task(task_rec):
+    start = dt.fromtimestamp(int(task_rec['start'])/1000)
+    end =  dt.fromtimestamp(int(task_rec['end'])/1000)
+    all_times = time_entries_in_range(start, end)
+    if not all_times:
+        return False
+    for entry in all_times:
+        if any([str(task_rec['id']) in entry['tags']]):
+            return True
 
 def update_conf(conf):
     conf_file = Path(__file__).parent / \
@@ -192,8 +221,8 @@ def get_key_result_from_goal(goal_rec, key_result_search):
         return [goal_rec for goal_rec in key_results if goal_rec['name'] in key_result_search]
 
 
-def time_completed_to_points(dt: datetime):
-    dt_reg = Arrow.fromdatetime(dt, 'America/New_York').datetime
+def time_completed_to_points(dt: dt):
+    dt_reg = dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
     return (24 - dt_reg.hour) - dt_reg.minute/60 - dt_reg.second/3600
 
 
@@ -304,19 +333,19 @@ def check_for_extra(goal_name, key_result_name, date: str):
 
 def update_time_goal(date=None):
     if not date:
-        date = datetime.strftime(datetime.now(), '%m-%d-%y')
+        date = dt.strftime(dt.now(), '%m-%d-%y')
 
     conf = get_conf()
     for goal_name, goal_conf in conf['Weekly goals update']['goals'].items():
         method_name = goal_conf["toggl_config"]["toggl_keyword"]
-        data = methods_map[method_name](date)
+        toggl_data = methods_map[method_name](date)
         goal_duration = goal_conf['toggl_config']['duration']
         proj_list = conf['Weekly goals update'][goal_conf['toggl_config']['projects']]
         task_names = goal_conf['toggl_config']['names']
         if goal_duration > 0:
-            pts = get_time_limit_points(conf, goal_duration, data, proj_list, task_names)
+            pts = get_time_limit_points(conf, goal_duration, toggl_data, proj_list, task_names)
         else:
-            pts = get_last_time_points(data, proj_list, task_names)
+            pts = get_last_time_points(toggl_data, proj_list, task_names)
 
         extra_pts = check_for_extra(goal_name, 'Hour Points', date)
         curr_pts = get_current_pts(goal_name)
@@ -509,3 +538,4 @@ def archive_historical_goals():
 with (Path(__file__).parent / f'data/goals.json').open('w+') as file:
     file.write(json.dumps(requests.get(f'https://api.clickup.com/api/v2/team/{team_id}/goal')))
 """
+export_time_tracking_data()
