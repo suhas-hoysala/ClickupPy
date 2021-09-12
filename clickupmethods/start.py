@@ -330,6 +330,12 @@ def check_for_extra(goal_name, key_result_name, date: str):
         return 'No entry'
     return net_change
 
+def get_toggl_data(date, toggl_keyword: str):
+    if toggl_keyword in methods_map:
+        return methods_map[toggl_keyword](date)
+    time1, time2 = toggl_keyword.split(' - ')
+    return by_times(date, date, time1, time2)
+
 
 def update_time_goal(date=None):
     if not date:
@@ -337,8 +343,8 @@ def update_time_goal(date=None):
 
     conf = get_conf()
     for goal_name, goal_conf in conf['Weekly goals update']['goals'].items():
-        method_name = goal_conf["toggl_config"]["toggl_keyword"]
-        toggl_data = methods_map[method_name](date)
+        toggl_keyword = goal_conf["toggl_config"]["toggl_keyword"]
+        toggl_data = get_toggl_data(date, toggl_keyword)
         goal_duration = goal_conf['toggl_config']['duration']
         proj_list = conf['Weekly goals update'][goal_conf['toggl_config']['projects']]
         task_names = goal_conf['toggl_config']['names']
@@ -538,4 +544,7 @@ def archive_historical_goals():
 with (Path(__file__).parent / f'data/goals.json').open('w+') as file:
     file.write(json.dumps(requests.get(f'https://api.clickup.com/api/v2/team/{team_id}/goal')))
 """
-export_time_tracking_data()
+def do():
+    export_time_tracking_data()
+    input("Press enter when you are finished.")
+    update_weekly_goals()
