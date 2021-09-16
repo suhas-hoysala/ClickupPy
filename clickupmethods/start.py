@@ -557,5 +557,3 @@ def do(day=None):
         export_time_tracking_data(date)
     input("Press enter when you are finished.")
     update_weekly_goals()
-
-do('09-14-21')
