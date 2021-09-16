@@ -126,7 +126,7 @@ def export_time_tracking_data(day: dt = dt.now()):
         start = dt.fromtimestamp(int(rec['start'])/1000)
         duration = int(int(rec['duration'])/1000)
         tags = [str(rec['id']), str(rec['task']['id'])]
-        if not validate_task(rec):
+        if not validate_task(rec) and duration > 0:
             print(create_time_entry(name, start, duration, tags=tags))
     pass
 
@@ -222,16 +222,18 @@ def get_key_result_from_goal(goal_rec, key_result_search):
 
 
 def time_completed_to_points(dt: dt):
-    dt_reg = dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
-    return (24 - dt_reg.hour) - dt_reg.minute/60 - dt_reg.second/3600
+    if not dt.tzinfo:
+        dt = dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
+    return (24 - dt.hour) - dt.minute/60 - dt.second/3600
 
 
-def get_time_limit_points(conf, goal_duration, data, proj_list, task_names):
+def get_time_limit_points(conf, goal_duration, toggl_data, proj_list, task_names):
     total_duration = 0.0
     for proj in proj_list:
-        if not proj in data:
+        if not proj in toggl_data:
             continue
-        rel_tasks = [rec for rec in data[proj] if not task_names or any([name in rec['description'] for name in task_names])]
+        rel_tasks = [rec for rec in toggl_data[proj] if not task_names or any([name in rec['description'] for name in task_names])]
+        rel_tasks.sort(key=lambda item: item['start'])
         for entry in rel_tasks:
             total_duration += entry['duration']/60.0
             if total_duration >= goal_duration:
@@ -544,7 +546,16 @@ def archive_historical_goals():
 with (Path(__file__).parent / f'data/goals.json').open('w+') as file:
     file.write(json.dumps(requests.get(f'https://api.clickup.com/api/v2/team/{team_id}/goal')))
 """
-def do():
-    export_time_tracking_data()
+def do(day=None):
+    if not day:
+        day = dt.strftime(dt.today(), '%m-%d-%y')
+    start_date, end_date = get_date_change(day)
+
+    dates_of_week = [parser.parse(start_date) + datetime.timedelta(days=x)
+                     for x in range(0, (parser.parse(day)-parser.parse(start_date)).days+1)]
+    for date in dates_of_week:
+        export_time_tracking_data(date)
     input("Press enter when you are finished.")
     update_weekly_goals()
+
+do('09-14-21')
