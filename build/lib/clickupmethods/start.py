@@ -299,6 +299,9 @@ def update_weekly_key_result(goal_name, key_result_name, steps_current, note):
 def update_control_key_result(goal_name, note):
     goal_rec = get_goal_from_search(goal_name)
     key_result = get_key_result_from_goal(goal_rec, 'Hour Points')
+    if not key_result:
+        key_result = create_key_result(goal_rec['goal']['id'], 'Hour Points', 0,
+                              calculate_hour_points(goal_name), 'pts')['key_result']
 
     percent_completed = key_result['percent_completed']
     decimal.getcontext().rounding = decimal.ROUND_DOWN
@@ -315,12 +318,18 @@ def update_control_key_result(goal_name, note):
 def get_current_pts(goal_name):
     goal_rec = get_goal_from_search(goal_name)
     key_result = get_key_result_from_goal(goal_rec, 'Hour Points')
+    if not key_result:
+        key_result = create_key_result(goal_rec['goal']['id'], 'Hour Points', 0,
+                              calculate_hour_points(goal_name), 'pts')['key_result']
     return key_result['steps_current']
 
 
 def check_for_extra(goal_name, key_result_name, date: str):
     goal_rec = get_goal_from_search(goal_name)
     key_result = get_key_result_from_goal(goal_rec, key_result_name)
+    if not key_result:
+        key_result = create_key_result(goal_rec['goal']['id'], 'Hour Points', 0,
+                              calculate_hour_points(goal_name), 'pts')['key_result']
     net_change = 0.0
     no_entry = True
     for hist_rec in goal_rec['goal']['history']:
@@ -487,7 +496,8 @@ def calculate_hour_points(goal_name):
     if not goal_records:
         return 1
     pts_list = [item['pts_achieved'] for item in goal_records[-5:]]
-    return sum(pts_list)/len(pts_list)
+    avg = sum(pts_list)/len(pts_list)
+    return avg if avg > 0 else 1
 
 
 def update_goal_hist(existing_goal_rec):
@@ -497,6 +507,9 @@ def update_goal_hist(existing_goal_rec):
     goal_name = existing_goal_rec['goal']['name']
     due_date = existing_goal_rec['goal']['due_date']
     key_result = get_key_result_from_goal(existing_goal_rec, 'Hour Points')
+    if not key_result:
+        key_result = create_key_result(existing_goal_rec['goal']['id'], 'Hour Points', 0,
+                              calculate_hour_points(goal_name), 'pts')
     pts_achieved = key_result['steps_current']
     completed = key_result['completed']
     conf = get_conf()
