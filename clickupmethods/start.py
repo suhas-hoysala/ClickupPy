@@ -137,6 +137,8 @@ def validate_task(task_rec):
     if not all_times:
         return False
     for entry in all_times:
+        if not 'tags' in entry:
+            continue
         if any([str(task_rec['id']) in entry['tags']]):
             return True
 
@@ -554,6 +556,14 @@ def archive_historical_goals():
     for goal in goal_list:
         archive_goal(goal)
 
+def export_weekly_time_tracking_data(day=None):
+    if not day:
+        day = dt.strftime(dt.today(), '%m-%d-%y')
+    start_date, end_date = get_date_change(day)
+    dates_of_week = [parser.parse(start_date) + datetime.timedelta(days=x)
+                     for x in range(0, (parser.parse(day)-parser.parse(start_date)).days+1)]
+    for date in dates_of_week:
+        export_time_tracking_data(date)
 
 """
 with (Path(__file__).parent / f'data/goals.json').open('w+') as file:
@@ -562,11 +572,8 @@ with (Path(__file__).parent / f'data/goals.json').open('w+') as file:
 def do(day=None):
     if not day:
         day = dt.strftime(dt.today(), '%m-%d-%y')
-    start_date, end_date = get_date_change(day)
 
-    dates_of_week = [parser.parse(start_date) + datetime.timedelta(days=x)
-                     for x in range(0, (parser.parse(day)-parser.parse(start_date)).days+1)]
-    for date in dates_of_week:
-        export_time_tracking_data(date)
+    export_weekly_time_tracking_data(day)
+    
     input("Press enter when you are finished.")
     update_weekly_goals()
