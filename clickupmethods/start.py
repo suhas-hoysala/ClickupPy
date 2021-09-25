@@ -1,17 +1,15 @@
-from pyclickup import ClickUp
 import json
-from typing import Union
-from requests.models import Response
 from pathlib import Path
-from datetime import datetime as dt, timedelta, timezone
+import datetime
 from datetime import date
 from dateutil import parser
 import random
 import os
 from togglmethods.drivers import *
 import decimal
-import tenacity
 import spotifymethods
+from clickupmethods.clickupext import ClickUpExt
+from clickupmethods.utilmethods import *
 
 methods_map = {
     "morning": morning_time_entries,
@@ -24,56 +22,6 @@ methods_map = {
 def get_parent_dir():
     return os.path.dirname(os.path.realpath(__file__))
 
-
-class ClickUpExt(ClickUp):
-
-    class ErrException(Exception):
-        pass
-    @tenacity.retry(wait=tenacity.wait_fixed(15),
-                    stop=tenacity.stop_after_attempt(8))
-    def delete(
-        self, path: str, raw: bool = False, **kwargs
-    ) -> Union[list, dict, Response]:
-        """makes a put request to the API"""
-        request = self._req(path, method="delete", **kwargs)
-        if 'err' in request:
-            if self.delete.retry.statistics['attempt_number'] == 8:
-                return request
-            raise ClickUpExt.ErrException()
-        return request
-
-    @tenacity.retry(wait=tenacity.wait_fixed(15),
-                    stop=tenacity.stop_after_attempt(8))
-    def get(self: ClickUp, path: str, raw: bool = False, **kwargs
-            ) -> Union[list, dict, Response]:
-        request = super().get(path, **kwargs)
-        if 'err' in request:
-            if self.get.retry.statistics['attempt_number'] == 8:
-                return request
-            raise ClickUpExt.ErrException()
-        return request
-
-    @tenacity.retry(wait=tenacity.wait_fixed(15),
-                    stop=tenacity.stop_after_attempt(8))
-    def post(self: ClickUp, path: str, raw: bool = False, **kwargs
-             ) -> Union[list, dict, Response]:
-        request = super().post(path, **kwargs)
-        if 'err' in request:
-            if self.post.retry.statistics['attempt_number'] == 8:
-                return request
-            raise ClickUpExt.ErrException()
-        return request
-
-    @tenacity.retry(wait=tenacity.wait_fixed(15),
-                    stop=tenacity.stop_after_attempt(8))
-    def put(self: ClickUp, path: str, raw: bool = False, **kwargs
-            ) -> Union[list, dict, Response]:
-        request = super().put(path, **kwargs)
-        if 'err' in request:
-            if self.put.retry.statistics['attempt_number'] == 8:
-                return request
-            raise ClickUpExt.ErrException()
-        return request
 
 def get_conf():
     conf_file = Path(__file__).parent / \
@@ -185,8 +133,8 @@ def get_date_change(day: str = None, start_day: str = 'Wed'):
 
     start_day_offset = (day.weekday() - start_day) % 7
     end_day_offset = -(day.weekday() - (start_day-1)) % 7
-    start_day_date = day - timedelta(days=start_day_offset)
-    end_day_date = day + timedelta(days=end_day_offset)
+    start_day_date = day - datetime.timedelta(days=start_day_offset)
+    end_day_date = day + datetime.timedelta(days=end_day_offset)
 
     return f'{start_day_date.month}-{start_day_date.day}-{start_day_date.year}', f'{end_day_date.month}-{end_day_date.day}-{end_day_date.year}'
 
