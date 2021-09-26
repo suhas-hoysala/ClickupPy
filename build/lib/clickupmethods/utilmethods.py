@@ -96,12 +96,14 @@ class TimeExport():
         if not 'data' in clickup_time_data:
             return
         for rec in clickup_time_data['data']:
-            name = rec['task']['name']
+            name = ''
+            task_id = ''
+            if 'task' in rec:
+                name = rec['task']['name']
+                task_id = str(rec['task']['id'])
             start = dt.fromtimestamp(int(rec['start'])/1000)
             duration = int(int(rec['duration'])/1000)
-            tags = [str(rec['id']), str(rec['task']['id'])]
+            tags = [str(rec['id']), task_id]
             if not TimeExport.validate_task(rec) and duration > 0:
                 print(create_time_entry(name, start, duration, tags=tags))
 
-co = ConfObject('', [], '', [
-                datetime.datetime.now() - datetime.timedelta(days=1), datetime.datetime.now()])
