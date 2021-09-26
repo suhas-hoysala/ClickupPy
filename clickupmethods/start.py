@@ -56,40 +56,6 @@ def reference(clickup):
     print(str(tasks))
 
 
-def get_time_tracking_data(start_time: dt, end_time: dt):
-    start_time_ms = str(int(start_time.timestamp()*1000))
-    end_time_ms = str(int(end_time.timestamp()*1000))
-    return clickup.get(f'https://api.clickup.com/api/v2/team/{team_id}/time_entries?start_date={start_time_ms}&end_date={end_time_ms}')
-
-def get_day_time_tracking_data(day: dt = dt.now()):
-    dt_of_day = dt(day.year, day.month, day.day).replace(tzinfo=None).astimezone(tz=timezone.utc)
-    return get_time_tracking_data(dt_of_day, dt_of_day + timedelta(days=1))
-
-def export_time_tracking_data(day: dt = dt.now()):
-    clickup_time_data = get_day_time_tracking_data(day)
-    if not 'data' in clickup_time_data:
-        return
-    for rec in clickup_time_data['data']:
-        name = rec['task']['name']
-        start = dt.fromtimestamp(int(rec['start'])/1000)
-        duration = int(int(rec['duration'])/1000)
-        tags = [str(rec['id']), str(rec['task']['id'])]
-        if not validate_task(rec) and duration > 0:
-            print(create_time_entry(name, start, duration, tags=tags))
-    pass
-
-def validate_task(task_rec):
-    start = dt.fromtimestamp(int(task_rec['start'])/1000)
-    end =  dt.fromtimestamp(int(task_rec['end'])/1000)
-    all_times = time_entries_in_range(start, end)
-    if not all_times:
-        return False
-    for entry in all_times:
-        if not 'tags' in entry:
-            continue
-        if any([str(task_rec['id']) in entry['tags']]):
-            return True
-
 def update_conf(conf):
     conf_file = Path(__file__).parent / \
         f"./data/conf.json"
