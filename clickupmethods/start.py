@@ -231,9 +231,9 @@ def update_time_goal(date=None):
         proj_list = conf['Weekly goals update'][goal_conf['toggl_config']['projects']]
         task_names = goal_conf['toggl_config']['names']
         if goal_duration > 0:
-            pts = get_time_limit_points(conf, goal_duration, toggl_data, proj_list, task_names)
+            pts = PointsUpdate.get_time_limit_points(conf, goal_duration, toggl_data, proj_list, task_names)
         else:
-            pts = get_last_time_points(toggl_data, proj_list, task_names)
+            pts = PointsUpdate.get_last_time_points(toggl_data, proj_list, task_names)
 
         extra_pts = check_for_extra(goal_name, 'Hour Points', date)
         curr_pts = get_current_pts(goal_name)
@@ -432,7 +432,7 @@ def export_weekly_time_tracking_data(day=None):
     dates_of_week = [parser.parse(start_date) + datetime.timedelta(days=x)
                      for x in range(0, (parser.parse(day)-parser.parse(start_date)).days+1)]
     for date in dates_of_week:
-        export_time_tracking_data(date)
+        TimeExport.export_time_tracking_data(clickup, date)
 
 """
 with (Path(__file__).parent / f'data/goals.json').open('w+') as file:

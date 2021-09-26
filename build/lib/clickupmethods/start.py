@@ -56,40 +56,6 @@ def reference(clickup):
     print(str(tasks))
 
 
-def get_time_tracking_data(start_time: dt, end_time: dt):
-    start_time_ms = str(int(start_time.timestamp()*1000))
-    end_time_ms = str(int(end_time.timestamp()*1000))
-    return clickup.get(f'https://api.clickup.com/api/v2/team/{team_id}/time_entries?start_date={start_time_ms}&end_date={end_time_ms}')
-
-def get_day_time_tracking_data(day: dt = dt.now()):
-    dt_of_day = dt(day.year, day.month, day.day).replace(tzinfo=None).astimezone(tz=timezone.utc)
-    return get_time_tracking_data(dt_of_day, dt_of_day + timedelta(days=1))
-
-def export_time_tracking_data(day: dt = dt.now()):
-    clickup_time_data = get_day_time_tracking_data(day)
-    if not 'data' in clickup_time_data:
-        return
-    for rec in clickup_time_data['data']:
-        name = rec['task']['name']
-        start = dt.fromtimestamp(int(rec['start'])/1000)
-        duration = int(int(rec['duration'])/1000)
-        tags = [str(rec['id']), str(rec['task']['id'])]
-        if not validate_task(rec) and duration > 0:
-            print(create_time_entry(name, start, duration, tags=tags))
-    pass
-
-def validate_task(task_rec):
-    start = dt.fromtimestamp(int(task_rec['start'])/1000)
-    end =  dt.fromtimestamp(int(task_rec['end'])/1000)
-    all_times = time_entries_in_range(start, end)
-    if not all_times:
-        return False
-    for entry in all_times:
-        if not 'tags' in entry:
-            continue
-        if any([str(task_rec['id']) in entry['tags']]):
-            return True
-
 def update_conf(conf):
     conf_file = Path(__file__).parent / \
         f"./data/conf.json"
@@ -169,51 +135,6 @@ def get_key_result_from_goal(goal_rec, key_result_search):
 
     elif type(key_result_search) == list:
         return [goal_rec for goal_rec in key_results if goal_rec['name'] in key_result_search]
-
-
-def time_completed_to_points(dt: dt):
-    if not dt.tzinfo:
-        dt = dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
-    return (24 - dt.hour) - dt.minute/60 - dt.second/3600
-
-
-def get_time_limit_points(conf, goal_duration, toggl_data, proj_list, task_names):
-    total_duration = 0.0
-    for proj in proj_list:
-        if not proj in toggl_data:
-            continue
-        rel_tasks = [rec for rec in toggl_data[proj] if not task_names or any([name in rec['description'] for name in task_names])]
-        rel_tasks.sort(key=lambda item: item['start'])
-        for entry in rel_tasks:
-            total_duration += entry['duration']/60.0
-            if total_duration >= goal_duration:
-                extra = total_duration - goal_duration
-                goal_finish_time = parser.parse(
-                    entry['stop']) - timedelta(minutes=extra)
-                goal_finish_time = goal_finish_time.replace(
-                    tzinfo=timezone.utc).astimezone(tz=None)
-                return_value = time_completed_to_points(goal_finish_time)
-                return return_value
-    return 0.0
-
-
-def get_last_time_points(data, proj_list,  task_names):
-    last_entry = None
-    for proj in proj_list:
-        if not proj in data or not data[proj]:
-            continue
-        rel_tasks = [rec for rec in data[proj] if not task_names or any([name in rec['description'] for name in task_names])]
-        final_proj_entry = rel_tasks[-1]
-        if not last_entry or parser.parse(
-                final_proj_entry['stop']) > parser.parse(last_entry['stop']):
-            last_entry = final_proj_entry
-    if not last_entry:
-        return 0.0
-
-    goal_finish_time = parser.parse(last_entry['stop'])
-    goal_finish_time = goal_finish_time.replace(
-        tzinfo=timezone.utc).astimezone(tz=None)
-    return time_completed_to_points(goal_finish_time)
 
 def update_key_result(key_result_id, steps_current, note):
     key_result_habit_new = {
@@ -310,9 +231,9 @@ def update_time_goal(date=None):
         proj_list = conf['Weekly goals update'][goal_conf['toggl_config']['projects']]
         task_names = goal_conf['toggl_config']['names']
         if goal_duration > 0:
-            pts = get_time_limit_points(conf, goal_duration, toggl_data, proj_list, task_names)
+            pts = PointsUpdate.get_time_limit_points(conf, goal_duration, toggl_data, proj_list, task_names)
         else:
-            pts = get_last_time_points(toggl_data, proj_list, task_names)
+            pts = PointsUpdate.get_last_time_points(toggl_data, proj_list, task_names)
 
         extra_pts = check_for_extra(goal_name, 'Hour Points', date)
         curr_pts = get_current_pts(goal_name)
@@ -511,7 +432,7 @@ def export_weekly_time_tracking_data(day=None):
     dates_of_week = [parser.parse(start_date) + datetime.timedelta(days=x)
                      for x in range(0, (parser.parse(day)-parser.parse(start_date)).days+1)]
     for date in dates_of_week:
-        export_time_tracking_data(date)
+        TimeExport.export_time_tracking_data(clickup, date)
 
 """
 with (Path(__file__).parent / f'data/goals.json').open('w+') as file:

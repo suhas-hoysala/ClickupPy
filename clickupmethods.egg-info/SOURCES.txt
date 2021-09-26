@@ -1,7 +1,11 @@
 setup.py
 clickupmethods/__init__.py
+clickupmethods/clickupext.py
+clickupmethods/confmanager.py
+clickupmethods/confobject.py
 clickupmethods/secrets.py
 clickupmethods/start.py
+clickupmethods/utilmethods.py
 clickupmethods.egg-info/PKG-INFO
 clickupmethods.egg-info/SOURCES.txt
 clickupmethods.egg-info/dependency_links.txt
