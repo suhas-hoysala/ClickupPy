@@ -136,51 +136,6 @@ def get_key_result_from_goal(goal_rec, key_result_search):
     elif type(key_result_search) == list:
         return [goal_rec for goal_rec in key_results if goal_rec['name'] in key_result_search]
 
-
-def time_completed_to_points(dt: dt):
-    if not dt.tzinfo:
-        dt = dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
-    return (24 - dt.hour) - dt.minute/60 - dt.second/3600
-
-
-def get_time_limit_points(conf, goal_duration, toggl_data, proj_list, task_names):
-    total_duration = 0.0
-    for proj in proj_list:
-        if not proj in toggl_data:
-            continue
-        rel_tasks = [rec for rec in toggl_data[proj] if not task_names or any([name in rec['description'] for name in task_names])]
-        rel_tasks.sort(key=lambda item: item['start'])
-        for entry in rel_tasks:
-            total_duration += entry['duration']/60.0
-            if total_duration >= goal_duration:
-                extra = total_duration - goal_duration
-                goal_finish_time = parser.parse(
-                    entry['stop']) - timedelta(minutes=extra)
-                goal_finish_time = goal_finish_time.replace(
-                    tzinfo=timezone.utc).astimezone(tz=None)
-                return_value = time_completed_to_points(goal_finish_time)
-                return return_value
-    return 0.0
-
-
-def get_last_time_points(data, proj_list,  task_names):
-    last_entry = None
-    for proj in proj_list:
-        if not proj in data or not data[proj]:
-            continue
-        rel_tasks = [rec for rec in data[proj] if not task_names or any([name in rec['description'] for name in task_names])]
-        final_proj_entry = rel_tasks[-1]
-        if not last_entry or parser.parse(
-                final_proj_entry['stop']) > parser.parse(last_entry['stop']):
-            last_entry = final_proj_entry
-    if not last_entry:
-        return 0.0
-
-    goal_finish_time = parser.parse(last_entry['stop'])
-    goal_finish_time = goal_finish_time.replace(
-        tzinfo=timezone.utc).astimezone(tz=None)
-    return time_completed_to_points(goal_finish_time)
-
 def update_key_result(key_result_id, steps_current, note):
     key_result_habit_new = {
         'steps_current': steps_current,
